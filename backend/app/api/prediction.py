@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -39,6 +41,14 @@ class PredictionResponse(BaseModel):
     data_version: str | None = None
 
 
+class ActualObservationRequest(BaseModel):
+    prediction_id: int
+    actual_value: float
+    bust_error_threshold: Optional[float] = Field(
+        default=3.0, description="Error margin (°C or mm) beyond which a forecast is marked as a bust"
+    )
+
+
 @router.post("/predict", response_model=PredictionResponse)
 async def predict(
     request: ForecastRequest, db: Session = Depends(get_db)
@@ -46,7 +56,6 @@ async def predict(
     if request.latitude is None or request.longitude is None:
         raise HTTPException(status_code=422, detail="latitude and longitude are required for V0.1")
 
-    # 1. Fetch live multi-member ensemble NWP forecast data
     try:
         forecast = await fetch_ensemble_forecast(
             location=request.location,
@@ -61,16 +70,10 @@ async def predict(
             detail=f"Failed to fetch live ensemble forecast upstream: {str(exc)}",
         )
 
-    # 2. Extract statistical and distributional features
     features = build_features(forecast)
-
-    # 3. Model inference and dynamic evidence attribution
     result = scorer.predict_probability(features)
-
-    # 4. Safety guardrails and trust evaluation
     safety = evaluate(feature_values=features, probability=result.probability)
 
-    # 5. Persist prediction audit log to database
     log_entry = PredictionLog(
         location=request.location,
         latitude=request.latitude,
@@ -89,7 +92,6 @@ async def predict(
     db.add(log_entry)
     db.commit()
 
-    # 6. Return response
     return PredictionResponse(
         location=request.location,
         bust_probability=None if safety.abstain else result.probability,
@@ -104,13 +106,80 @@ async def predict(
     )
 
 
+@router.post("/actuals", tags=["evaluation"])
+def log_actual_observation(
+    payload: ActualObservationRequest, db: Session = Depends(get_db)
+):
+    """Log ground-truth weather observation to score prediction accuracy."""
+    record = db.query(PredictionLog).filter(PredictionLog.id == payload.prediction_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Prediction record not found")
+
+    forecast_mean = record.forecast_mean or 0.0
+    error = abs(payload.actual_value - forecast_mean)
+    was_bust = error > payload.bust_error_threshold
+
+    record.actual_value = payload.actual_value
+    record.was_bust = was_bust
+    record.verified_at = datetime.now(timezone.utc)
+    db.commit()
+
+    return {
+        "status": "verified",
+        "prediction_id": record.id,
+        "forecast_mean": forecast_mean,
+        "actual_value": payload.actual_value,
+        "error": round(error, 3),
+        "was_bust": was_bust,
+    }
+
+
+@router.get("/metrics", tags=["evaluation"])
+def get_evaluation_metrics(db: Session = Depends(get_db)):
+    """Calculate Brier score and accuracy metrics over verified predictions."""
+    verified = (
+        db.query(PredictionLog)
+        .filter(PredictionLog.verified_at.isnot(None))
+        .all()
+    )
+
+    if not verified:
+        return {
+            "status": "insufficient_data",
+            "verified_count": 0,
+            "message": "No verified ground-truth observations logged yet.",
+        }
+
+    brier_sum = 0.0
+    mae_sum = 0.0
+    bust_count = 0
+
+    for item in verified:
+        p = item.bust_probability or 0.5
+        o = 1.0 if item.was_bust else 0.0
+        brier_sum += (p - o) ** 2
+
+        if item.forecast_mean is not None and item.actual_value is not None:
+            mae_sum += abs(item.forecast_mean - item.actual_value)
+
+        if item.was_bust:
+            bust_count += 1
+
+    total = len(verified)
+    return {
+        "verified_count": total,
+        "bust_rate": round(bust_count / total, 4),
+        "brier_score": round(brier_sum / total, 4),
+        "mean_absolute_error": round(mae_sum / total, 4),
+    }
+
+
 @router.get("/logs", tags=["prediction"])
 def get_prediction_logs(limit: int = 10, db: Session = Depends(get_db)):
-    """Retrieve the most recent prediction audit records."""
-    logs = (
+    """Retrieve recent prediction audit records."""
+    return (
         db.query(PredictionLog)
         .order_by(PredictionLog.id.desc())
         .limit(limit)
         .all()
     )
-    return logs

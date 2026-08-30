@@ -21,9 +21,14 @@ class PredictionLog(Base):
     forecast_spread = Column(Float, nullable=True)
     member_count = Column(Integer, nullable=True)
 
-    # Output Decisions
+    # Model Decision Output
     bust_probability = Column(Float, nullable=True)
     risk_level = Column(String, nullable=True)
     trust_state = Column(String)
     abstain = Column(Boolean)
     model_version = Column(String, nullable=True)
+
+    # Ground-Truth Verification
+    actual_value = Column(Float, nullable=True)
+    was_bust = Column(Boolean, nullable=True)
+    verified_at = Column(DateTime, nullable=True)

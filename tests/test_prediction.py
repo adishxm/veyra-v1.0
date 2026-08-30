@@ -37,12 +37,29 @@ def test_prediction_requires_lat_lon() -> None:
     assert response.status_code == 422
 
 
-def test_prediction_logs_endpoint() -> None:
-    # Query logs endpoint after prediction has run
-    response = client.get("/v1/logs?limit=5")
-    assert response.status_code == 200
-    logs = response.json()
-    assert isinstance(logs, list)
+def test_prediction_logs_and_verification_cycle() -> None:
+    # 1. Fetch latest prediction log
+    logs_res = client.get("/v1/logs?limit=1")
+    assert logs_res.status_code == 200
+    logs = logs_res.json()
     assert len(logs) >= 1
-    assert "location" in logs[0]
-    assert "bust_probability" in logs[0]
+    pred_id = logs[0]["id"]
+
+    # 2. Log actual observation
+    actual_res = client.post(
+        "/v1/actuals",
+        json={
+            "prediction_id": pred_id,
+            "actual_value": 31.5,
+            "bust_error_threshold": 2.5,
+        },
+    )
+    assert actual_res.status_code == 200
+    assert actual_res.json()["status"] == "verified"
+
+    # 3. Check metrics computation
+    metrics_res = client.get("/v1/metrics")
+    assert metrics_res.status_code == 200
+    metrics = metrics_res.json()
+    assert metrics["verified_count"] >= 1
+    assert "brier_score" in metrics
