@@ -3,196 +3,544 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Veyra V1.0 Dashboard</title>
+  <title>Veyra | Forecast Reliability Intelligence</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #f1f5f9;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
-      margin: 0;
-      padding: 20px;
+    :root {
+      --bg: #0b0f19;
+      --card-bg: #111827;
+      --card-border: #1f2937;
+      --text-main: #f9fafb;
+      --text-muted: #9ca3af;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --critical: #dc2626;
+    }
+
+    * {
       box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
-    .card {
-      background: #ffffff;
-      padding: 28px;
-      border-radius: 12px;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-      width: 100%;
-      max-width: 520px;
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-main);
+      padding: 24px;
+      min-height: 100vh;
     }
-    h2 {
-      margin-top: 0;
-      color: #0f172a;
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 24px;
     }
-    .form-grid {
+
+    /* Header */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .brand h1 {
+      font-size: 22px;
+      letter-spacing: -0.5px;
+    }
+    .brand p {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .badge-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+      background: #1e293b;
+      color: #94a3b8;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--warning);
+    }
+    .status-dot.online {
+      background: var(--success);
+      box-shadow: 0 0 8px var(--success);
+    }
+
+    /* Dashboard Layout */
+    .grid-2 {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 12px;
+      gap: 20px;
     }
+    @media (max-width: 768px) {
+      .grid-2 {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Cards */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .card-title {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: var(--text-main);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Forms */
     .form-group {
-      margin-bottom: 12px;
+      margin-bottom: 14px;
     }
     label {
       display: block;
-      font-size: 13px;
-      font-weight: 600;
-      color: #334155;
-      margin-bottom: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 6px;
     }
-    input {
+    input, select {
       width: 100%;
       padding: 9px 12px;
-      border: 1px solid #cbd5e1;
       border-radius: 6px;
+      border: 1px solid var(--card-border);
+      background: #1f2937;
+      color: #fff;
       font-size: 14px;
-      box-sizing: border-box;
     }
-    .btn-row {
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+    .row {
       display: flex;
-      gap: 10px;
-      margin-top: 16px;
+      gap: 12px;
     }
-    button {
+    .row > * {
       flex: 1;
-      background-color: #2563eb;
-      color: white;
+    }
+
+    button {
+      width: 100%;
+      padding: 10px;
+      background: var(--primary);
       border: none;
-      padding: 10px 16px;
-      font-size: 14px;
-      font-weight: 600;
       border-radius: 6px;
+      color: white;
+      font-weight: 600;
+      font-size: 14px;
       cursor: pointer;
       transition: background 0.2s;
-    }
-    button.secondary {
-      background-color: #64748b;
+      margin-top: 8px;
     }
     button:hover {
-      opacity: 0.9;
+      background: var(--primary-hover);
     }
-    pre {
-      background-color: #0f172a;
-      color: #38bdf8;
-      padding: 14px;
+
+    /* Result Panel */
+    .result-box {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .score-meter {
+      background: #1f2937;
+      padding: 16px;
       border-radius: 8px;
-      font-size: 13px;
-      overflow-x: auto;
-      margin-top: 18px;
-      min-height: 60px;
+      text-align: center;
+    }
+    .score-value {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: -1px;
+    }
+    .score-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+    .tags-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .tag {
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      background: #1e293b;
+      color: #93c5fd;
+    }
+    .risk-badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .risk-LOW { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+    .risk-MEDIUM { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+    .risk-HIGH { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+    .risk-CRITICAL { background: rgba(220, 38, 38, 0.3); color: #fca5a5; }
+
+    /* Verification & Metrics Grid */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .metric-card {
+      background: #1f2937;
+      padding: 12px;
+      border-radius: 8px;
+      text-align: center;
+    }
+    .metric-card span {
+      display: block;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .metric-card strong {
+      font-size: 18px;
+      color: var(--text-main);
+    }
+
+    /* Logs Table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      text-align: left;
+    }
+    th {
+      padding: 8px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--card-border);
+    }
+    td {
+      padding: 8px;
+      border-bottom: 1px solid #1a2234;
+    }
+    .btn-sm {
+      padding: 4px 8px;
+      font-size: 11px;
+      margin: 0;
+      width: auto;
     }
   </style>
 </head>
 <body>
 
-  <div class="card">
-    <h2>Veyra Prediction Portal</h2>
-
-    <div class="btn-row">
-      <button class="secondary" onclick="checkHealth()">Ping Health</button>
-    </div>
-
-    <hr style="margin: 18px 0; border: 0; border-top: 1px solid #e2e8f0;" />
-
-    <div class="form-group">
-      <label for="location">Location Name:</label>
-      <input type="text" id="location" value="Station-A" />
-    </div>
-
-    <div class="form-grid">
-      <div class="form-group">
-        <label for="lat">Latitude:</label>
-        <input type="number" id="lat" value="22.5726" step="0.0001" />
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <div class="brand">
+        <h1>Veyra Intelligence Portal</h1>
+        <p>Calibrated Ensemble Forecast Reliability & Safe Abstention Engine</p>
       </div>
-
-      <div class="form-group">
-        <label for="lon">Longitude:</label>
-        <input type="number" id="lon" value="88.3639" step="0.0001" />
+      <div class="badge-pill" id="healthPill">
+        <span class="status-dot" id="healthDot"></span>
+        <span id="healthText">Connecting...</span>
       </div>
-    </div>
+    </header>
 
-    <div class="form-grid">
-      <div class="form-group">
-        <label for="temp">Temperature (°C):</label>
-        <input type="number" id="temp" value="28.5" step="0.1" />
+    <!-- Calibration Metrics Row -->
+    <div class="card">
+      <div class="card-title">
+        <span>Model Verification Performance</span>
+        <button class="btn-sm" style="background:#374151" onclick="loadMetrics()">Refresh</button>
       </div>
-
-      <div class="form-group">
-        <label for="humidity">Humidity (%):</label>
-        <input type="number" id="humidity" value="65" />
-      </div>
-    </div>
-
-    <div class="form-grid">
-      <div class="form-group">
-        <label for="wind">Wind Speed (km/h):</label>
-        <input type="number" id="wind" value="12.0" step="0.1" />
-      </div>
-
-      <div class="form-group">
-        <label for="pressure">Pressure (hPa):</label>
-        <input type="number" id="pressure" value="1012" />
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <span>Verified Forecasts</span>
+          <strong id="mVerified">0</strong>
+        </div>
+        <div class="metric-card">
+          <span>Brier Score</span>
+          <strong id="mBrier">0.000</strong>
+        </div>
+        <div class="metric-card">
+          <span>Mean Abs Error</span>
+          <strong id="mMAE">0.00°C</strong>
+        </div>
+        <div class="metric-card">
+          <span>Historical Bust Rate</span>
+          <strong id="mBustRate">0.0%</strong>
+        </div>
       </div>
     </div>
 
-    <button onclick="runPrediction()">Run Prediction</button>
+    <!-- Prediction Workbench -->
+    <div class="grid-2">
+      <!-- Input Form -->
+      <div class="card">
+        <div class="card-title">Run Reliability Inference</div>
 
-    <pre id="output">Status: Ready</pre>
+        <div class="form-group">
+          <label>Target Location / Station</label>
+          <input type="text" id="loc" value="Kolkata" />
+        </div>
+
+        <div class="row">
+          <div class="form-group">
+            <label>Latitude (°N)</label>
+            <input type="number" id="lat" value="22.5726" step="0.0001" />
+          </div>
+          <div class="form-group">
+            <label>Longitude (°E)</label>
+            <input type="number" id="lon" value="88.3639" step="0.0001" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="form-group">
+            <label>Weather Variable</label>
+            <select id="var">
+              <option value="temperature_2m">Temperature (2m)</option>
+              <option value="precipitation">Precipitation</option>
+              <option value="wind_speed_10m">Wind Speed (10m)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Lead Horizon (Hours)</label>
+            <input type="number" id="lead" value="48" min="1" max="168" />
+          </div>
+        </div>
+
+        <button onclick="runInference()" id="inferBtn">Execute Inference</button>
+      </div>
+
+      <!-- Live Output Decision Panel -->
+      <div class="card">
+        <div class="card-title">Inference Output & Safety Decision</div>
+        <div class="result-box" id="resultBox">
+          <div class="score-meter">
+            <div class="score-value" id="resProb">--%</div>
+            <div class="score-label" id="resRisk">Awaiting Execution</div>
+          </div>
+          <div>
+            <label>Trust & Validation State</label>
+            <span class="tag" id="resTrust">NOT_RUN</span>
+          </div>
+          <div>
+            <label>Active Evidence Flags</label>
+            <div class="tags-row" id="resEvidence">
+              <span class="tag">none</span>
+            </div>
+          </div>
+          <div>
+            <label>Safety Reason Codes</label>
+            <div class="tags-row" id="resReasons">
+              <span class="tag">none</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Audit Log Table & Verification -->
+    <div class="card">
+      <div class="card-title">
+        <span>Recent Forecast Logs & Ground-Truth Verification</span>
+        <button class="btn-sm" style="background:#374151" onclick="loadLogs()">Reload Logs</button>
+      </div>
+      <div style="overflow-x: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Location</th>
+              <th>Mean / Spread</th>
+              <th>Bust Risk</th>
+              <th>Trust State</th>
+              <th>Actual Observed</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="logsTableBody">
+            <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No records loaded.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <script>
-    const BASE_URL = "https://veyra-v1-0.onrender.com";
+    const API_BASE = "https://veyra-v1-0.onrender.com";
 
     async function checkHealth() {
-      const output = document.getElementById("output");
-      output.innerText = "Checking health...";
+      const dot = document.getElementById("healthDot");
+      const text = document.getElementById("healthText");
       try {
-        const res = await fetch(`${BASE_URL}/health`);
+        const res = await fetch(`${API_BASE}/health`);
         const data = await res.json();
-        output.innerText = JSON.stringify(data, null, 2);
+        if (data.status === "ok") {
+          dot.classList.add("online");
+          text.innerText = `${data.service} (${data.version})`;
+        }
       } catch (err) {
-        output.innerText = "Error: " + err.message;
+        text.innerText = "Offline / Sleeping";
       }
     }
 
-    async function runPrediction() {
-      const output = document.getElementById("output");
-      output.innerText = "Running inference...";
+    async function runInference() {
+      const btn = document.getElementById("inferBtn");
+      btn.innerText = "Fetching NWP & Computing...";
+      btn.disabled = true;
 
       const payload = {
-        location: document.getElementById("location").value,
+        location: document.getElementById("loc").value,
         latitude: parseFloat(document.getElementById("lat").value),
         longitude: parseFloat(document.getElementById("lon").value),
-        temperature: parseFloat(document.getElementById("temp").value),
-        humidity: parseFloat(document.getElementById("humidity").value),
-        wind_speed: parseFloat(document.getElementById("wind").value),
-        pressure: parseFloat(document.getElementById("pressure").value)
+        variable: document.getElementById("var").value,
+        lead_hours: parseInt(document.getElementById("lead").value, 10)
       };
 
       try {
-        const res = await fetch(`${BASE_URL}/v1/predict`, {
+        const res = await fetch(`${API_BASE}/v1/predict`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
         });
 
         if (!res.ok) {
-          const errorDetail = await res.text();
-          throw new Error(`HTTP ${res.status}: ${errorDetail}`);
+          const err = await res.text();
+          throw new Error(err);
         }
 
         const data = await res.json();
-        output.innerText = JSON.stringify(data, null, 2);
+
+        // Render Decision
+        const prob = data.bust_probability !== null ? (data.bust_probability * 100).toFixed(1) + "%" : "ABSTAINED";
+        document.getElementById("resProb").innerText = prob;
+        
+        const riskEl = document.getElementById("resRisk");
+        const risk = data.risk_level || "UNKNOWN";
+        riskEl.innerHTML = `<span class="risk-badge risk-${risk}">${risk} RISK</span>`;
+
+        document.getElementById("resTrust").innerText = data.trust_state;
+
+        // Evidence
+        const evContainer = document.getElementById("resEvidence");
+        evContainer.innerHTML = data.evidence.length > 0 
+          ? data.evidence.map(e => `<span class="tag">${e}</span>`).join("")
+          : `<span class="tag">nominal</span>`;
+
+        // Reasons
+        const reasContainer = document.getElementById("resReasons");
+        reasContainer.innerHTML = data.reason_codes.length > 0
+          ? data.reason_codes.map(r => `<span class="tag" style="color:#fca5a5">${r}</span>`).join("")
+          : `<span class="tag">nominal</span>`;
+
+        // Refresh Logs & Metrics
+        loadLogs();
+        loadMetrics();
       } catch (err) {
-        output.innerText = "Prediction Request Failed:\n" + err.message;
+        alert("Inference Error: " + err.message);
+      } finally {
+        btn.innerText = "Execute Inference";
+        btn.disabled = false;
       }
     }
-  </script>
 
+    async function loadMetrics() {
+      try {
+        const res = await fetch(`${API_BASE}/v1/metrics`);
+        const data = await res.json();
+        if (data.status !== "insufficient_data") {
+          document.getElementById("mVerified").innerText = data.verified_count;
+          document.getElementById("mBrier").innerText = data.brier_score.toFixed(3);
+          document.getElementById("mMAE").innerText = data.mean_absolute_error.toFixed(2) + "°";
+          document.getElementById("mBustRate").innerText = (data.bust_rate * 100).toFixed(1) + "%";
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function loadLogs() {
+      try {
+        const res = await fetch(`${API_BASE}/v1/logs?limit=8`);
+        const logs = await res.json();
+        const tbody = document.getElementById("logsTableBody");
+        if (!logs || logs.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">No prediction records found.</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = logs.map(l => {
+          const isVerified = l.actual_value !== null;
+          return `
+            <tr>
+              <td>#${l.id}</td>
+              <td><strong>${l.location}</strong></td>
+              <td>${l.forecast_mean ? l.forecast_mean.toFixed(1) : "--"} / ±${l.forecast_spread ? l.forecast_spread.toFixed(2) : "--"}</td>
+              <td><span class="risk-badge risk-${l.risk_level || 'LOW'}">${l.bust_probability ? (l.bust_probability * 100).toFixed(0) + '%' : 'N/A'}</span></td>
+              <td>${l.trust_state}</td>
+              <td>
+                ${isVerified ? `<strong>${l.actual_value}</strong> ${l.was_bust ? '<span style="color:#ef4444">(Bust)</span>' : '<span style="color:#10b981">(Valid)</span>'}` : `<input type="number" step="0.1" style="width:70px; padding:3px 6px;" id="act_${l.id}" placeholder="Actual" />`}
+              </td>
+              <td>
+                ${isVerified ? `<span style="color:#9ca3af">Verified</span>` : `<button class="btn-sm" onclick="verifyLog(${l.id})">Save</button>`}
+              </td>
+            </tr>
+          `;
+        }).join("");
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function verifyLog(id) {
+      const valInput = document.getElementById(`act_${id}`);
+      const val = parseFloat(valInput.value);
+      if (isNaN(val)) {
+        alert("Please enter a valid numeric actual observation value.");
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/v1/actuals`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prediction_id: id, actual_value: val, bust_error_threshold: 2.5 })
+        });
+        if (res.ok) {
+          loadLogs();
+          loadMetrics();
+        }
+      } catch (err) {
+        alert("Failed to submit ground truth observation.");
+      }
+    }
+
+    // Initialize Dashboard
+    checkHealth();
+    loadMetrics();
+    loadLogs();
+  </script>
 </body>
 </html>
