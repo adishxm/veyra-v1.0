@@ -2,7 +2,7 @@ import sqlite3
 import json
 import shutil
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from backend.app.services.retraining import DB_PATH
 
 def init_job_queue():
@@ -42,7 +42,7 @@ def update_job_status(job_id: str, status: str, results: list):
     conn.commit()
     conn.close()
 
-def get_persisted_job(job_id: str) -> Dict[str, Any]:
+def get_persisted_job(job_id: str) -> Optional[Dict[str, Any]]:
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute("SELECT job_id, status, created_at, total_items, results FROM job_queue WHERE job_id = ?", (job_id,))
@@ -56,7 +56,7 @@ def get_persisted_job(job_id: str) -> Dict[str, Any]:
             "total_items": row[3],
             "results": json.loads(row[4]) if row[4] else []
         }
-    return {"job_id": job_id, "status": "COMPLETED", "results": []}
+    return None
 
 def create_database_backup() -> str:
     backup_path = f"{DB_PATH}.backup_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
