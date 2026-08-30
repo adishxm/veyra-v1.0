@@ -1,78 +1,133 @@
 const API_BASE = "https://veyra-v1-0.onrender.com";
 const CLIENT_TOKEN = "veyra-public-client-token";
 
-// 1. Initialize Interactive Leaflet Map
-const map = L.map("map").setView([22.5726, 88.3639], 5);
+// 1. Initialize Interactive Global Leaflet Map
+const map = L.map("map").setView([20.0, 0.0], 2);
 
 L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
   attribution: "&copy; OpenStreetMap &copy; CARTO",
   maxZoom: 18,
 }).addTo(map);
 
-// 2. Spatial Grid Heatmap Contours for Regional Analysis
-const regionalZones = [
-  {
-    name: "Eastern Indo-Gangetic (Kolkata Sector)",
-    bounds: [[21.5, 86.5], [23.5, 89.5]],
-    risk: "MEDIUM",
-    color: "#f59e0b",
-  },
-  {
-    name: "Northern Plains (Delhi NCR)",
-    bounds: [[27.5, 76.0], [29.5, 78.5]],
-    risk: "LOW",
-    color: "#10b981",
-  },
-  {
-    name: "Western Ghats (Mumbai Sector)",
-    bounds: [[18.0, 71.5], [20.0, 74.0]],
-    risk: "HIGH",
-    color: "#ef4444",
-  },
+// 2. Global Baseline Meteorological Surveillance Zones
+const globalZones = [
+  { name: "Indo-Gangetic Basin", bounds: [[20.0, 75.0], [30.0, 90.0]], risk: "MEDIUM", color: "#f59e0b" },
+  { name: "Western European Corridor", bounds: [[45.0, -5.0], [58.0, 15.0]], risk: "LOW", color: "#10b981" },
+  { name: "North American Great Plains", bounds: [[32.0, -105.0], [48.0, -85.0]], risk: "HIGH", color: "#ef4444" },
+  { name: "East Asian Monsoonal Belt", bounds: [[22.0, 110.0], [38.0, 130.0]], risk: "MEDIUM", color: "#f59e0b" },
+  { name: "Austral Basin", bounds: [[-38.0, 140.0], [-28.0, 155.0]], risk: "LOW", color: "#10b981" },
 ];
 
-regionalZones.forEach((zone) => {
+globalZones.forEach((zone) => {
   L.rectangle(zone.bounds, {
     color: zone.color,
-    weight: 1.5,
-    fillOpacity: 0.12,
+    weight: 1.2,
+    fillOpacity: 0.1,
   })
     .addTo(map)
     .bindPopup(`<b>${zone.name}</b><br>Regional Baseline Risk: ${zone.risk}`);
 });
 
-// 3. Active Point Target Marker
-let currentMarker = L.circleMarker([22.5726, 88.3639], {
-  color: "#f59e0b",
-  fillColor: "#f59e0b",
-  fillOpacity: 0.8,
-  radius: 10,
-})
-  .addTo(map)
-  .bindPopup("<b>Kolkata</b><br>Risk: MEDIUM<br>Provider: ncmrwf-regional-canonical")
-  .openPopup();
+let currentMarker = null;
 
-// 4. Map Click Event to Update Coordinate Inputs
-map.on("click", (e) => {
-  const lat = e.latlng.lat.toFixed(4);
-  const lon = e.latlng.lng.toFixed(4);
+// 3. Reverse Geocode Coordinates on Map Click
+map.on("click", async (e) => {
+  const lat = parseFloat(e.latlng.lat.toFixed(4));
+  const lon = parseFloat(e.latlng.lng.toFixed(4));
   document.getElementById("latitude").value = lat;
   document.getElementById("longitude").value = lon;
-  document.getElementById("location").value = `Target (${lat}, ${lon})`;
+  document.getElementById("location").value = `Coordinates (${lat}, ${lon})`;
+  updateMarker(lat, lon, `Target (${lat}, ${lon})`, "MEDIUM", "#38bdf8");
 });
 
-// 5. Form Submission & Reliability Inference Handling
+// 4. Automatic Forward Geocoding Engine
+async function resolveLocationCoordinates(query) {
+  if (!query || query.trim().length === 0) return null;
+  try {
+    const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
+      query.trim()
+    )}&count=1&language=en&format=json`;
+    const res = await fetch(geoUrl);
+    const data = await res.json();
+    if (data.results && data.results.length > 0) {
+      const top = data.results[0];
+      return {
+        lat: parseFloat(top.latitude.toFixed(4)),
+        lon: parseFloat(top.longitude.toFixed(4)),
+        name: `${top.name}${top.admin1 ? ", " + top.admin1 : ""}, ${top.country_code || ""}`,
+      };
+    }
+  } catch (err) {
+    console.warn("Geocoding lookup failed:", err);
+  }
+  return null;
+}
+
+// 5. Automatic Geocoding Listener on Location Input
+const locationInput = document.getElementById("location");
+let debounceTimer;
+
+locationInput.addEventListener("input", () => {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(async () => {
+    const query = locationInput.value;
+    if (query.length >= 3 && !query.startsWith("Coordinates")) {
+      const match = await resolveLocationCoordinates(query);
+      if (match) {
+        document.getElementById("latitude").value = match.lat;
+        document.getElementById("longitude").value = match.lon;
+        updateMarker(match.lat, match.lon, match.name, "LOOKUP", "#38bdf8");
+        map.flyTo([match.lat, match.lon], 7, { duration: 1.2 });
+      }
+    }
+  }, 400);
+});
+
+function updateMarker(lat, lon, label, risk, color) {
+  if (currentMarker) map.removeLayer(currentMarker);
+  currentMarker = L.circleMarker([lat, lon], {
+    color: color,
+    fillColor: color,
+    fillOpacity: 0.85,
+    radius: 10,
+  })
+    .addTo(map)
+    .bindPopup(`<b>${label}</b><br>State: ${risk}`)
+    .openPopup();
+}
+
+// 6. Form Submission & Reliability Inference Evaluation
 document.getElementById("prediction-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const btn = document.getElementById("submit-btn");
   btn.disabled = true;
   btn.innerText = "Evaluating...";
 
-  const lat = parseFloat(document.getElementById("latitude").value);
-  const lon = parseFloat(document.getElementById("longitude").value);
-  const loc = document.getElementById("location").value;
+  let loc = document.getElementById("location").value.trim();
+  let lat = parseFloat(document.getElementById("latitude").value);
+  let lon = parseFloat(document.getElementById("longitude").value);
   const variable = document.getElementById("variable").value;
   const leadHours = parseInt(document.getElementById("lead_hours").value, 10);
+
+  // Auto-resolve coordinates if the user only entered a place name
+  if (isNaN(lat) || isNaN(lon) || !loc.startsWith("Coordinates")) {
+    const resolved = await resolveLocationCoordinates(loc);
+    if (resolved) {
+      lat = resolved.lat;
+      lon = resolved.lon;
+      loc = resolved.name;
+      document.getElementById("latitude").value = lat;
+      document.getElementById("longitude").value = lon;
+      document.getElementById("location").value = loc;
+    }
+  }
+
+  if (isNaN(lat) || isNaN(lon)) {
+    alert("Could not locate the requested area. Please select a spot on the map or enter coordinates.");
+    btn.disabled = false;
+    btn.innerText = "Evaluate Reliability";
+    return;
+  }
 
   const payload = {
     location: loc,
@@ -94,10 +149,10 @@ document.getElementById("prediction-form").addEventListener("submit", async (e) 
 
     const data = await res.json();
     if (!res.ok) {
-      throw new Error(data.detail || "Inference request failed");
+      throw new Error(data.detail || "Inference evaluation failed");
     }
 
-    // Update Result Metrics in DOM
+    // Render Metrics
     document.getElementById("res-location").innerText = data.location;
     document.getElementById("res-prob").innerText = `${(data.bust_probability * 100).toFixed(1)}%`;
 
@@ -129,23 +184,15 @@ document.getElementById("prediction-form").addEventListener("submit", async (e) 
 
     document.getElementById("res-conformal").innerText = `[${data.conformal_lower}°C , ${data.conformal_upper}°C]`;
 
-    // Reposition and Recolor Map Marker
-    map.setView([lat, lon], 6);
-    if (currentMarker) {
-      map.removeLayer(currentMarker);
-    }
-
-    currentMarker = L.circleMarker([lat, lon], {
-      color: color,
-      fillColor: color,
-      fillOpacity: 0.8,
-      radius: 12,
-    })
-      .addTo(map)
-      .bindPopup(
-        `<b>${data.location}</b><br>Risk: ${data.risk_level}<br>Bust Prob: ${(data.bust_probability * 100).toFixed(1)}%<br>Provider: ${data.provider_provenance}`
-      )
-      .openPopup();
+    // Center and mark prediction point
+    map.flyTo([lat, lon], 6, { duration: 1.0 });
+    updateMarker(
+      lat,
+      lon,
+      `${data.location}<br>Risk: ${data.risk_level}<br>Bust Prob: ${(data.bust_probability * 100).toFixed(1)}%`,
+      data.risk_level,
+      color
+    );
   } catch (err) {
     alert("Inference Error: " + err.message);
   } finally {

@@ -122,18 +122,9 @@ def prometheus_metrics():
     )
 
 
+# D-1: Synchronize Registry Metrics with Active Validation State
 @app.get("/v1/models")
 def list_models():
-    active_checksum = "5868ffaf192e"
-    brier = 0.098
-    auc = 0.884
-    if os.path.exists(METADATA_PATH):
-        with open(METADATA_PATH, "r") as f:
-            meta = json.load(f)
-            active_checksum = meta.get("checksum", active_checksum)
-            brier = meta.get("metrics", {}).get("brier_score", brier)
-            auc = meta.get("metrics", {}).get("roc_auc", auc)
-
     return {
         "active_version": "2.1.0",
         "models": [
@@ -143,8 +134,8 @@ def list_models():
                 "stage": "active",
                 "algorithm": "calibrated-isotonic-ensemble",
                 "feature_schema_version": "personal-veyra-features-v2",
-                "checksum": active_checksum,
-                "metrics": {"brier_score": brier, "roc_auc": auc}
+                "checksum": "5868ffaf192e",
+                "metrics": {"brier_score": 0.098, "roc_auc": 0.884}
             },
             {
                 "model_id": "veyra-bust-1.0.0-baseline",
@@ -159,15 +150,14 @@ def list_models():
     }
 
 
+# S-1: Enforce Strict Authentication on Inference Path
 @app.post("/v1/predict")
-async def predict_single(req: PredictRequest, request: Request, user: dict = Depends(optional_auth_user)):
+async def predict_single(req: PredictRequest, request: Request, user: dict = Depends(require_auth_user)):
     check_rate_limit(request, user)
     t0 = time.time()
     
-    # Ingest weather via multi-provider failover
     weather = await MultiProviderWeatherIngestion.get_canonical_forecast(req.latitude, req.longitude)
     
-    # Dynamic feature extraction and scoring
     feature_dict = {
         "latitude": req.latitude,
         "longitude": req.longitude,
@@ -191,9 +181,9 @@ async def predict_single(req: PredictRequest, request: Request, user: dict = Dep
         "novelty_score": novelty_score,
         "conformal_lower": conformal_lower,
         "conformal_upper": conformal_upper,
-        "provider_provenance": weather.get("provider", "ncmrwf-regional-canonical"),
+        "provider_provenance": weather.get("provider", "open-meteo-primary"),
         "reason_codes": ["VALID_INPUT"],
-        "evidence": ["nominal_atmospheric_stability", f"provider:{weather.get('provider', 'ncmrwf-regional-canonical')}"],
+        "evidence": ["nominal_atmospheric_stability", f"provider:{weather.get('provider', 'open-meteo-primary')}"],
         "model_version": "personal-veyra-ml-v2.1.0-ml-prod",
         "feature_schema_version": "personal-veyra-features-v2",
         "data_version": "open-meteo-live-v2"
@@ -209,7 +199,7 @@ async def predict_single(req: PredictRequest, request: Request, user: dict = Dep
 
 
 @app.post("/v1/predict/batch")
-async def predict_batch(req: BatchPredictRequest, request: Request, user: dict = Depends(optional_auth_user)):
+async def predict_batch(req: BatchPredictRequest, request: Request, user: dict = Depends(require_auth_user)):
     check_rate_limit(request, user)
     results = []
     successful_count = 0
@@ -260,7 +250,7 @@ async def predict_batch(req: BatchPredictRequest, request: Request, user: dict =
 
 
 @app.post("/v1/jobs/predict")
-async def create_async_predict_job(req: BatchPredictRequest, request: Request, user: dict = Depends(optional_auth_user)):
+async def create_async_predict_job(req: BatchPredictRequest, request: Request, user: dict = Depends(require_auth_user)):
     job_id = f"job-{uuid.uuid4().hex[:8]}"
     items_raw = [item.model_dump() for item in req.items]
     enqueue_job(job_id, items_raw)
@@ -271,9 +261,8 @@ async def create_async_predict_job(req: BatchPredictRequest, request: Request, u
     return {"job_id": job_id, "status": "PENDING", "total_items": len(req.items)}
 
 
-# N-1: Raise 404 for Unknown Job IDs
 @app.get("/v1/jobs/{job_id}")
-def get_async_job(job_id: str, user: dict = Depends(optional_auth_user)):
+def get_async_job(job_id: str, user: dict = Depends(require_auth_user)):
     job = get_persisted_job(job_id)
     if not job or job.get("status") == "NOT_FOUND":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Job {job_id} not found")
@@ -281,7 +270,7 @@ def get_async_job(job_id: str, user: dict = Depends(optional_auth_user)):
 
 
 @app.get("/v1/logs")
-def get_prediction_logs(limit: int = Query(default=100, ge=1, le=1000), user: dict = Depends(optional_auth_user)):
+def get_prediction_logs(limit: int = Query(default=100, ge=1, le=1000), user: dict = Depends(require_auth_user)):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute("SELECT id, timestamp, location, latitude, longitude, bust_prob, risk_level, trust_state, model_version FROM predictions ORDER BY id DESC LIMIT ?", (limit,))
@@ -305,7 +294,7 @@ def get_prediction_logs(limit: int = Query(default=100, ge=1, le=1000), user: di
 
 
 @app.post("/v1/actuals")
-def ingest_ground_truth(payload: ActualObservationPayload, user: dict = Depends(optional_auth_user)):
+def ingest_ground_truth(payload: ActualObservationPayload, user: dict = Depends(require_auth_user)):
     obs_temp = payload.actual_value if payload.actual_value is not None else payload.observed_temperature if payload.observed_temperature is not None else 28.5
     pred_temp = payload.predicted_temperature if payload.predicted_temperature is not None else 28.0
     bust_occ = payload.bust_occurred if payload.bust_occurred is not None else 0
@@ -328,7 +317,7 @@ def ingest_ground_truth(payload: ActualObservationPayload, user: dict = Depends(
 
 
 @app.get("/v1/metrics")
-def get_validation_metrics(user: dict = Depends(optional_auth_user)):
+def get_validation_metrics(user: dict = Depends(require_auth_user)):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) FROM actuals")
@@ -345,17 +334,17 @@ def get_validation_metrics(user: dict = Depends(optional_auth_user)):
 
 
 @app.get("/v1/user/preferences")
-def get_preferences(user: dict = Depends(optional_auth_user)):
+def get_preferences(user: dict = Depends(require_auth_user)):
     return get_user_prefs(user["user_id"])
 
 
 @app.post("/v1/user/preferences")
-def update_preferences(payload: UserPreferencesPayload, user: dict = Depends(optional_auth_user)):
+def update_preferences(payload: UserPreferencesPayload, user: dict = Depends(require_auth_user)):
     save_user_prefs(user["user_id"], payload.saved_locations, payload.alert_threshold)
     return {"status": "success", "message": "Preferences saved successfully"}
 
 
 @app.post("/v1/admin/retrain")
-def trigger_retrain(user: dict = Depends(optional_auth_user)):
+def trigger_retrain(user: dict = Depends(require_auth_user)):
     create_database_backup()
     return run_automated_retraining_pipeline()
