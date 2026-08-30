@@ -1,17 +1,18 @@
 import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.app.api.batch import router as batch_router
 from backend.app.api.prediction import router as prediction_router
 from backend.app.db.session import init_db
 from backend.app.model.baseline import BaselineReliabilityScorer
 from backend.app.model.ml_scorer import CalibratedMLScorer
 from backend.app.model.registry import model_registry
+from backend.app.observability.metrics import telemetry
 
 
 def setup_model_registry():
-    # 1. Register Active ML Model
     ml_model = CalibratedMLScorer(version="2.1.0-ml-prod")
     model_registry.register(
         version="2.1.0",
@@ -21,7 +22,6 @@ def setup_model_registry():
         metrics={"brier_score": 0.098, "roc_auc": 0.884},
     )
 
-    # 2. Register Baseline Model as Rollback Safeguard
     baseline_model = BaselineReliabilityScorer()
     model_registry.register(
         version="1.0.0-baseline",
@@ -39,7 +39,6 @@ async def lifespan(app: FastAPI):
     yield
 
 
-# Immediate initialization for module imports and test suites
 init_db()
 setup_model_registry()
 
@@ -59,6 +58,7 @@ app.add_middleware(
 )
 
 app.include_router(prediction_router)
+app.include_router(batch_router)
 
 
 @app.get("/", tags=["system"])
@@ -77,3 +77,12 @@ def health() -> dict[str, str]:
         "service": os.getenv("APP_NAME", "veyra-v1-personal"),
         "version": os.getenv("APP_VERSION", "1.0.0"),
     }
+
+
+@app.get("/metrics", tags=["observability"])
+def prometheus_metrics():
+    """Exposes Prometheus text-formatted performance metrics."""
+    return Response(
+        content=telemetry.generate_prometheus_text(),
+        media_type="text/plain",
+    )

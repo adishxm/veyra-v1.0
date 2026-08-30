@@ -1,3 +1,4 @@
+import time
 from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,6 +9,7 @@ from backend.app.db.models import PredictionLog
 from backend.app.db.session import get_db
 from backend.app.features.basic import FEATURE_SCHEMA_VERSION, build_features
 from backend.app.model.registry import model_registry
+from backend.app.observability.metrics import telemetry
 from backend.app.safety.conformal import conformal_engine
 from backend.app.safety.evaluator import evaluate
 from backend.app.weather.schemas import ForecastRequest
@@ -68,7 +70,9 @@ async def predict(
             status_code=422, detail="latitude and longitude are required for V0.1"
         )
 
-    # 1. Fetch ensemble forecast
+    start_t = time.perf_counter()
+
+    # 1. Multi-provider ensemble fetch with failover
     try:
         forecast = await weather_service.get_forecast(
             location=request.location,
@@ -83,21 +87,29 @@ async def predict(
             detail=f"Failed to fetch ensemble forecast across all providers: {str(exc)}",
         )
 
-    # 2. Extract features
+    # 2. Feature Extraction
     features = build_features(forecast)
 
-    # 3. Model inference
+    # 3. Model Registry Dynamic Inference
     active_scorer, _ = model_registry.get_active_model()
     result = active_scorer.predict_probability(features)
 
-    # 4. Safety & Conformal Evaluation
+    # 4. Safety Guardrails & Trust Gating
     safety = evaluate(feature_values=features, probability=result.probability)
     interval = conformal_engine.compute_conformal_interval(
         forecast_mean=features.get("forecast_mean", 0.0),
         spread=features.get("forecast_spread", 1.0),
     )
 
-    # 5. Persist audit log
+    # 5. Record Telemetry Metrics
+    latency = time.perf_counter() - start_t
+    telemetry.record_inference(
+        trust_state=safety.trust_state,
+        risk_level=result.risk_level if not safety.abstain else None,
+        latency=latency,
+    )
+
+    # 6. SQLite Audit Persistence
     log_entry = PredictionLog(
         location=request.location,
         latitude=request.latitude,
@@ -135,6 +147,7 @@ async def predict(
 
 @router.get("/models", tags=["model-registry"])
 def list_registered_models():
+    """List all registered models, current active version, and validation metrics."""
     return {
         "active_version": model_registry._active_version,
         "models": list(model_registry._metadata.values()),
