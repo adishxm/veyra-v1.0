@@ -9,8 +9,8 @@ from backend.app.db.session import get_db
 from backend.app.features.basic import FEATURE_SCHEMA_VERSION, build_features
 from backend.app.model.baseline import BaselineReliabilityScorer
 from backend.app.safety.evaluator import evaluate
-from backend.app.weather.client import fetch_ensemble_forecast
 from backend.app.weather.schemas import ForecastRequest
+from backend.app.weather.service import weather_service
 
 router = APIRouter(prefix="/v1", tags=["prediction"])
 scorer = BaselineReliabilityScorer()
@@ -45,7 +45,8 @@ class ActualObservationRequest(BaseModel):
     prediction_id: int
     actual_value: float
     bust_error_threshold: Optional[float] = Field(
-        default=3.0, description="Error margin (°C or mm) beyond which a forecast is marked as a bust"
+        default=3.0,
+        description="Error margin (°C or mm) beyond which a forecast is marked as a bust",
     )
 
 
@@ -54,10 +55,13 @@ async def predict(
     request: ForecastRequest, db: Session = Depends(get_db)
 ) -> PredictionResponse:
     if request.latitude is None or request.longitude is None:
-        raise HTTPException(status_code=422, detail="latitude and longitude are required for V0.1")
+        raise HTTPException(
+            status_code=422, detail="latitude and longitude are required for V0.1"
+        )
 
+    # 1. Fetch ensemble data with automatic fallback failover
     try:
-        forecast = await fetch_ensemble_forecast(
+        forecast = await weather_service.get_forecast(
             location=request.location,
             latitude=request.latitude,
             longitude=request.longitude,
@@ -67,13 +71,15 @@ async def predict(
     except Exception as exc:
         raise HTTPException(
             status_code=502,
-            detail=f"Failed to fetch live ensemble forecast upstream: {str(exc)}",
+            detail=f"Failed to fetch ensemble forecast across all providers: {str(exc)}",
         )
 
+    # 2. Compute features & score probability
     features = build_features(forecast)
     result = scorer.predict_probability(features)
     safety = evaluate(feature_values=features, probability=result.probability)
 
+    # 3. Log to SQLite
     log_entry = PredictionLog(
         location=request.location,
         latitude=request.latitude,
