@@ -1,5 +1,7 @@
 import time
 import uuid
+import os
+import json
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, Depends, Request, Query
@@ -9,6 +11,8 @@ from pydantic import BaseModel, Field
 
 from backend.app.security.auth import get_current_user, check_rate_limit
 from backend.app.services.weather_providers import MultiProviderWeatherIngestion
+from backend.app.ml.inference import RealMLInferenceEngine, METADATA_PATH
+from backend.app.services.task_worker import enqueue_job, update_job_status, get_persisted_job, create_database_backup
 from backend.app.services.retraining import (
     log_prediction,
     run_automated_retraining_pipeline,
@@ -32,7 +36,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Prometheus Telemetry In-Memory Store
 METRICS = {
     "total_predictions": 0,
     "abstentions": 0,
@@ -40,10 +43,6 @@ METRICS = {
     "risk_tiers": {"LOW": 0, "MEDIUM": 0, "HIGH": 0, "CRITICAL": 0}
 }
 
-# In-memory Async Job Store
-ASYNC_JOBS: Dict[str, Dict[str, Any]] = {}
-
-# Pydantic Schemas
 class PredictRequest(BaseModel):
     location: str = "Kolkata"
     latitude: float = Field(..., ge=-90.0, le=90.0)
@@ -107,6 +106,16 @@ def prometheus_metrics():
 
 @app.get("/v1/models")
 def list_models():
+    active_checksum = "5868ffaf192e"
+    brier = 0.1895
+    auc = 0.7816
+    if os.path.exists(METADATA_PATH):
+        with open(METADATA_PATH, "r") as f:
+            meta = json.load(f)
+            active_checksum = meta.get("checksum", active_checksum)
+            brier = meta.get("metrics", {}).get("brier_score", brier)
+            auc = meta.get("metrics", {}).get("roc_auc", auc)
+
     return {
         "active_version": "2.1.0",
         "models": [
@@ -114,10 +123,10 @@ def list_models():
                 "model_id": "veyra-bust-2.1.0",
                 "version": "2.1.0",
                 "stage": "active",
-                "algorithm": "calibrated-logistic-ensemble",
+                "algorithm": "calibrated-isotonic-ensemble",
                 "feature_schema_version": "personal-veyra-features-v2",
-                "checksum": "22d078168a70",
-                "metrics": {"brier_score": 0.098, "roc_auc": 0.884}
+                "checksum": active_checksum,
+                "metrics": {"brier_score": brier, "roc_auc": auc}
             },
             {
                 "model_id": "veyra-bust-1.0.0-baseline",
@@ -137,15 +146,20 @@ async def predict_single(req: PredictRequest, request: Request, user: dict = Dep
     check_rate_limit(request, user)
     t0 = time.time()
     
+    # 1. Canonical ingestion with failover
     weather = await MultiProviderWeatherIngestion.get_canonical_forecast(req.latitude, req.longitude)
-    base_temp = weather["temperature"]
-    novelty_score = round(abs(req.latitude * 0.035 + req.longitude * 0.015 - 2.0), 3)
     
-    conformal_lower = round(base_temp - 2.15, 2)
-    conformal_upper = round(base_temp + 1.95, 2)
+    # 2. Extract features & score through serialized ML engine
+    novelty_raw = round(abs(req.latitude * 0.035 + req.longitude * 0.015 - 2.0), 3)
+    feature_dict = {
+        "temperature": weather["temperature"],
+        "ensemble_spread": weather.get("ensemble_spread", 1.2),
+        "temp_variance": weather.get("temp_variance", 0.5),
+        "lead_hours": req.lead_hours,
+        "novelty_score": novelty_raw
+    }
     
-    spread = weather["ensemble_spread"]
-    bust_prob = round(min(max(0.12 + (spread * 0.15) + (req.lead_hours * 0.002), 0.05), 0.95), 4)
+    bust_prob, novelty_score, conformal_lower, conformal_upper = RealMLInferenceEngine.predict(feature_dict)
     
     risk_level = "LOW" if bust_prob < 0.30 else "MEDIUM" if bust_prob < 0.60 else "HIGH" if bust_prob < 0.85 else "CRITICAL"
     trust_state = "SUPPORTED" if novelty_score < 3.0 else "DEGRADED"
@@ -159,9 +173,9 @@ async def predict_single(req: PredictRequest, request: Request, user: dict = Dep
         "novelty_score": novelty_score,
         "conformal_lower": conformal_lower,
         "conformal_upper": conformal_upper,
-        "provider_provenance": weather.get("provider", "open-meteo-live-v2"),
+        "provider_provenance": weather.get("provider", "ncmrwf-regional-canonical"),
         "reason_codes": ["VALID_INPUT"],
-        "evidence": ["nominal_atmospheric_stability"],
+        "evidence": ["nominal_atmospheric_stability", f"provider:{weather.get('provider', 'ncmrwf-regional-canonical')}"],
         "model_version": "personal-veyra-ml-v2.1.0-ml-prod",
         "feature_schema_version": "personal-veyra-features-v2",
         "data_version": "open-meteo-live-v2"
@@ -230,24 +244,19 @@ async def predict_batch(req: BatchPredictRequest, request: Request, user: dict =
 @app.post("/v1/jobs/predict")
 async def create_async_predict_job(req: BatchPredictRequest, request: Request, user: dict = Depends(get_current_user)):
     job_id = f"job-{uuid.uuid4().hex[:8]}"
-    batch_res = await predict_batch(req, request, user)
+    # Change this line:
+    items_raw = [item.model_dump() for item in req.items]
+    enqueue_job(job_id, items_raw)
     
-    ASYNC_JOBS[job_id] = {
-        "job_id": job_id,
-        "status": "COMPLETED",
-        "created_at": datetime.utcnow().isoformat(),
-        "total_items": len(req.items),
-        "results": batch_res["results"]
-    }
+    batch_res = await predict_batch(req, request, user)
+    update_job_status(job_id, "COMPLETED", batch_res["results"])
     
     return {"job_id": job_id, "status": "PENDING", "total_items": len(req.items)}
 
 
 @app.get("/v1/jobs/{job_id}")
 def get_async_job(job_id: str, user: dict = Depends(get_current_user)):
-    if job_id not in ASYNC_JOBS:
-        return {"job_id": job_id, "status": "COMPLETED", "results": []}
-    return ASYNC_JOBS[job_id]
+    return get_persisted_job(job_id)
 
 
 @app.get("/v1/logs")
@@ -306,12 +315,20 @@ def get_validation_metrics():
     count = cur.fetchone()[0]
     conn.close()
     
+    brier = 0.1895
+    auc = 0.7816
+    if os.path.exists(METADATA_PATH):
+        with open(METADATA_PATH, "r") as f:
+            meta = json.load(f)
+            brier = meta.get("metrics", {}).get("brier_score", brier)
+            auc = meta.get("metrics", {}).get("roc_auc", auc)
+
     return {
         "status": "active",
         "verified_count": count,
-        "brier_score": 0.098,
+        "brier_score": brier,
         "mean_absolute_error": 0.82,
-        "roc_auc": 0.884
+        "roc_auc": auc
     }
 
 
@@ -328,4 +345,5 @@ def update_preferences(payload: UserPreferencesPayload, user: dict = Depends(get
 
 @app.post("/v1/admin/retrain")
 def trigger_retrain(user: dict = Depends(get_current_user)):
+    create_database_backup()
     return run_automated_retraining_pipeline()

@@ -1,0 +1,13 @@
+{
+  "model_id": "veyra-bust-2.1.0",
+  "version": "2.1.0",
+  "stage": "active",
+  "algorithm": "calibrated-isotonic-ensemble",
+  "feature_schema_version": "personal-veyra-features-v2",
+  "checksum": "5868ffaf192e",
+  "conformal_quantile_90": 0.7228,
+  "metrics": {
+    "brier_score": 0.1895,
+    "roc_auc": 0.7816
+  }
+}

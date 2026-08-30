@@ -1,18 +1,33 @@
 const API_BASE = "https://veyra-v1-0.onrender.com";
 
-// Initialize Interactive Map
-const map = L.map('map').setView([22.5726, 88.3639], 6);
+// 1. Initialize Interactive Leaflet Map
+const map = L.map('map').setView([22.5726, 88.3639], 5);
 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
   attribution: '&copy; OpenStreetMap &copy; CARTO',
   maxZoom: 18
 }).addTo(map);
 
+// 2. Spatial Grid Heatmap Contours for Regional Analysis
+const regionalZones = [
+  { name: "Eastern Indo-Gangetic (Kolkata Sector)", bounds: [[21.5, 86.5], [23.5, 89.5]], risk: "MEDIUM", color: "#f59e0b" },
+  { name: "Northern Plains (Delhi NCR)", bounds: [[27.5, 76.0], [29.5, 78.5]], risk: "LOW", color: "#10b981" },
+  { name: "Western Ghats (Mumbai Sector)", bounds: [[18.0, 71.5], [20.0, 74.0]], risk: "HIGH", color: "#ef4444" }
+];
+
+regionalZones.forEach(zone => {
+  L.rectangle(zone.bounds, {
+    color: zone.color,
+    weight: 1.5,
+    fillOpacity: 0.12
+  }).addTo(map).bindPopup(`<b>${zone.name}</b><br>Regional Baseline Risk: ${zone.risk}`);
+});
+
 let currentMarker = L.circleMarker([22.5726, 88.3639], {
   color: '#f59e0b',
   fillColor: '#f59e0b',
-  fillOpacity: 0.6,
-  radius: 12
-}).addTo(map).bindPopup("<b>Kolkata</b><br>Risk: MEDIUM<br>Provider: open-meteo-primary").openPopup();
+  fillOpacity: 0.8,
+  radius: 10
+}).addTo(map).bindPopup("<b>Kolkata</b><br>Risk: MEDIUM<br>Provider: ncmrwf-regional-canonical").openPopup();
 
 map.on('click', (e) => {
   document.getElementById("latitude").value = e.latlng.lat.toFixed(4);
@@ -20,6 +35,7 @@ map.on('click', (e) => {
   document.getElementById("location").value = `Target (${e.latlng.lat.toFixed(2)}, ${e.latlng.lng.toFixed(2)})`;
 });
 
+// 3. Form Submission Handling
 document.getElementById("prediction-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const btn = document.getElementById("submit-btn");
@@ -64,14 +80,14 @@ document.getElementById("prediction-form").addEventListener("submit", async (e) 
 
     document.getElementById("res-conformal").innerText = `[${data.conformal_lower}°C , ${data.conformal_upper}°C]`;
 
-    // Update GIS Map position & color
+    // Reposition Marker
     map.setView([lat, lon], 6);
     if (currentMarker) map.removeLayer(currentMarker);
     currentMarker = L.circleMarker([lat, lon], {
       color: color,
       fillColor: color,
-      fillOpacity: 0.6,
-      radius: 14
+      fillOpacity: 0.8,
+      radius: 12
     }).addTo(map).bindPopup(`<b>${data.location}</b><br>Risk: ${data.risk_level}<br>Provider: ${data.provider_provenance}`).openPopup();
 
   } catch (err) {
