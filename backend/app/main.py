@@ -481,3 +481,22 @@ def update_preferences(payload: UserPreferencesPayload, user: dict = Depends(req
 def trigger_retrain(user: dict = Depends(require_admin_user)):
     create_database_backup()
     return run_automated_retraining_pipeline()
+
+
+from backend.app.services.location_service import LocationService
+
+@app.get("/v1/location/resolve")
+async def resolve_location_endpoint(query: str = Query(..., min_length=1)):
+    res = await LocationService.resolve_location(query)
+    if not res:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unable to resolve location: '{query}'. Please specify a city or valid coordinates."
+        )
+    lat, lon, display_name = res
+    return {
+        "query": query,
+        "display_name": display_name,
+        "latitude": round(lat, 4),
+        "longitude": round(lon, 4)
+    }
