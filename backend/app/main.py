@@ -2,6 +2,8 @@ import time
 import uuid
 import os
 import json
+import math
+import html
 import sqlite3
 from enum import Enum
 from datetime import datetime
@@ -9,9 +11,9 @@ from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, Depends, Request, Query, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
-from backend.app.security.auth import require_auth_user, optional_auth_user, check_rate_limit
+from backend.app.security.auth import require_auth_user, require_admin_user, optional_auth_user, check_rate_limit
 from backend.app.services.weather_providers import MultiProviderWeatherIngestion
 from backend.app.ml.inference import RealMLInferenceEngine, METADATA_PATH
 from backend.app.services.task_worker import enqueue_job, update_job_status, get_persisted_job, create_database_backup
@@ -29,7 +31,6 @@ app = FastAPI(
     description="Production Numerical Weather Prediction Reliability & Bust Intelligence System"
 )
 
-# Exception Handler for Deep Nesting Recursion Attacks (Weakness B Fix)
 @app.exception_handler(RecursionError)
 async def recursion_exception_handler(request: Request, exc: RecursionError):
     return JSONResponse(
@@ -37,14 +38,12 @@ async def recursion_exception_handler(request: Request, exc: RecursionError):
         content={"detail": "Payload structure rejected: recursion depth limit exceeded"}
     )
 
-# Security Headers & 2MB Request Size Limiter Middleware (Weakness D & S-3 Fix)
 @app.middleware("http")
 async def security_and_payload_guard_middleware(request: Request, call_next):
-    # Enforce 2MB maximum payload limit
     content_length = request.headers.get("content-length")
     if content_length:
         try:
-            if int(content_length) > 2 * 1024 * 1024:  # 2MB
+            if int(content_length) > 2 * 1024 * 1024:
                 return PlainTextResponse("Payload Too Large: maximum allowed body is 2MB", status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
         except ValueError:
             pass
@@ -57,11 +56,11 @@ async def security_and_payload_guard_middleware(request: Request, call_next):
             content={"detail": "Payload structure rejected: recursion depth limit exceeded"}
         )
 
-    # Standard security defense headers
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Content-Security-Policy"] = "default-src 'self' https:; img-src 'self' data: https:; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:;"
     return response
 
 app.add_middleware(
@@ -84,6 +83,7 @@ class SupportedWeatherVariable(str, Enum):
     relative_humidity_2m = "relative_humidity_2m"
     surface_pressure = "surface_pressure"
     wind_speed_10m = "wind_speed_10m"
+    precipitation = "precipitation"
 
 class PredictRequest(BaseModel):
     location: str = "Kolkata"
@@ -92,12 +92,64 @@ class PredictRequest(BaseModel):
     variable: SupportedWeatherVariable = SupportedWeatherVariable.temperature_2m
     lead_hours: int = Field(default=48, ge=1, le=240)
 
+    @field_validator("latitude", "longitude", mode="before")
+    @classmethod
+    def check_finite_coords(cls, v):
+        try:
+            val = float(v)
+            if math.isnan(val) or math.isinf(val):
+                raise ValueError("Coordinates must be finite numeric values")
+            return val
+        except (TypeError, ValueError):
+            raise ValueError("Invalid numeric coordinates")
+
+    @field_validator("lead_hours", mode="before")
+    @classmethod
+    def check_finite_lead(cls, v):
+        try:
+            if isinstance(v, bool):
+                raise ValueError("Boolean values are not allowed for lead_hours")
+            val = float(v)
+            if math.isnan(val) or math.isinf(val) or not float(v).is_integer():
+                raise ValueError("lead_hours must be a finite integer")
+            return int(v)
+        except (TypeError, ValueError):
+            raise ValueError("lead_hours must be a valid integer")
+
 class BatchItemRequest(BaseModel):
     location: Optional[str] = "Unknown"
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     variable: Optional[SupportedWeatherVariable] = SupportedWeatherVariable.temperature_2m
     lead_hours: Optional[int] = 48
+
+    @field_validator("latitude", "longitude", mode="before")
+    @classmethod
+    def check_finite_batch_coords(cls, v):
+        if v is None:
+            return None
+        try:
+            val = float(v)
+            if math.isnan(val) or math.isinf(val):
+                return None
+            return val
+        except (TypeError, ValueError):
+            return None
+
+    @field_validator("lead_hours", mode="before")
+    @classmethod
+    def check_finite_batch_lead(cls, v):
+        if v is None:
+            return 48
+        try:
+            if isinstance(v, bool):
+                return 48
+            val = float(v)
+            if math.isnan(val) or math.isinf(val):
+                return 48
+            return int(v)
+        except (TypeError, ValueError):
+            return 48
 
 class BatchPredictRequest(BaseModel):
     items: List[BatchItemRequest]
@@ -146,7 +198,6 @@ def prometheus_metrics():
     )
 
 
-# D-1: Synchronized Model Registry
 @app.get("/v1/models")
 def list_models():
     return {
@@ -174,14 +225,13 @@ def list_models():
     }
 
 
-# S-1: Strictly Enforced Authentication on Inference
 @app.post("/v1/predict")
 async def predict_single(req: PredictRequest, request: Request, user: dict = Depends(require_auth_user)):
     check_rate_limit(request, user)
     t0 = time.time()
-    
-    weather = await MultiProviderWeatherIngestion.get_canonical_forecast(req.latitude, req.longitude)
-    
+
+    weather = await MultiProviderWeatherIngestion.get_canonical_forecast(req.latitude, req.longitude, req.lead_hours)
+
     feature_dict = {
         "latitude": req.latitude,
         "longitude": req.longitude,
@@ -190,14 +240,16 @@ async def predict_single(req: PredictRequest, request: Request, user: dict = Dep
         "temp_variance": weather.get("temp_variance", 0.45),
         "lead_hours": req.lead_hours
     }
-    
+
     bust_prob, novelty_score, conformal_lower, conformal_upper = RealMLInferenceEngine.predict(feature_dict)
-    
+
     risk_level = "LOW" if bust_prob < 0.30 else "MEDIUM" if bust_prob < 0.60 else "HIGH" if bust_prob < 0.85 else "CRITICAL"
     trust_state = "SUPPORTED" if novelty_score < 3.0 else "DEGRADED"
-    
+
+    sanitized_location = html.escape(str(req.location)[:100])
+
     response = {
-        "location": req.location,
+        "location": sanitized_location,
         "bust_probability": bust_prob,
         "risk_level": risk_level,
         "trust_state": trust_state,
@@ -212,19 +264,26 @@ async def predict_single(req: PredictRequest, request: Request, user: dict = Dep
         "feature_schema_version": "personal-veyra-features-v2",
         "data_version": "open-meteo-live-v2"
     }
-    
+
     elapsed = time.time() - t0
     METRICS["total_predictions"] += 1
     METRICS["total_latency_seconds"] += elapsed
     METRICS["risk_tiers"][risk_level] += 1
     log_prediction(response)
-    
+
     return response
 
 
 @app.post("/v1/predict/batch")
 async def predict_batch(req: BatchPredictRequest, request: Request, user: dict = Depends(require_auth_user)):
     check_rate_limit(request, user)
+
+    if len(req.items) > 50:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Synchronous batch exceeds 50 items. Use POST /v1/jobs/predict for larger batch workloads."
+        )
+
     results = []
     successful_count = 0
     failed_count = 0
@@ -232,7 +291,7 @@ async def predict_batch(req: BatchPredictRequest, request: Request, user: dict =
     for item in req.items:
         if item.latitude is None or item.longitude is None:
             results.append({
-                "location": item.location,
+                "location": html.escape(str(item.location or "Unknown")[:100]),
                 "latitude": item.latitude,
                 "longitude": item.longitude,
                 "success": False,
@@ -247,20 +306,21 @@ async def predict_batch(req: BatchPredictRequest, request: Request, user: dict =
             })
             failed_count += 1
         else:
-            weather = await MultiProviderWeatherIngestion.get_canonical_forecast(item.latitude, item.longitude)
+            lead = item.lead_hours or 48
+            weather = await MultiProviderWeatherIngestion.get_canonical_forecast(item.latitude, item.longitude, lead)
             feature_dict = {
                 "latitude": item.latitude,
                 "longitude": item.longitude,
                 "temperature": weather["temperature"],
                 "ensemble_spread": weather.get("ensemble_spread", 1.2),
                 "temp_variance": weather.get("temp_variance", 0.45),
-                "lead_hours": item.lead_hours or 48
+                "lead_hours": lead
             }
             bust_prob, novelty_score, conformal_lower, conformal_upper = RealMLInferenceEngine.predict(feature_dict)
             risk_level = "LOW" if bust_prob < 0.30 else "MEDIUM" if bust_prob < 0.60 else "HIGH" if bust_prob < 0.85 else "CRITICAL"
-            
-            res_item = {
-                "location": item.location or "Target",
+
+            results.append({
+                "location": html.escape(str(item.location or "Target")[:100]),
                 "latitude": item.latitude,
                 "longitude": item.longitude,
                 "success": True,
@@ -278,8 +338,7 @@ async def predict_batch(req: BatchPredictRequest, request: Request, user: dict =
                 "feature_schema_version": "personal-veyra-features-v2",
                 "data_version": "open-meteo-live-v2",
                 "error": None
-            }
-            results.append(res_item)
+            })
             successful_count += 1
 
     return {
@@ -295,10 +354,10 @@ async def create_async_predict_job(req: BatchPredictRequest, request: Request, u
     job_id = f"job-{uuid.uuid4().hex[:8]}"
     items_raw = [item.model_dump() for item in req.items]
     enqueue_job(job_id, items_raw)
-    
+
     batch_res = await predict_batch(req, request, user)
     update_job_status(job_id, "COMPLETED", batch_res["results"])
-    
+
     return {"job_id": job_id, "status": "PENDING", "total_items": len(req.items)}
 
 
@@ -317,7 +376,7 @@ def get_prediction_logs(limit: int = Query(default=100, ge=1, le=1000), user: di
     cur.execute("SELECT id, timestamp, location, latitude, longitude, bust_prob, risk_level, trust_state, model_version FROM predictions ORDER BY id DESC LIMIT ?", (limit,))
     rows = cur.fetchall()
     conn.close()
-    
+
     return [
         {
             "id": r[0],
@@ -335,12 +394,12 @@ def get_prediction_logs(limit: int = Query(default=100, ge=1, le=1000), user: di
 
 
 @app.post("/v1/actuals")
-def ingest_ground_truth(payload: ActualObservationPayload, user: dict = Depends(require_auth_user)):
+def ingest_ground_truth(payload: ActualObservationPayload, user: dict = Depends(require_admin_user)):
     obs_temp = payload.actual_value if payload.actual_value is not None else payload.observed_temperature if payload.observed_temperature is not None else 28.5
     pred_temp = payload.predicted_temperature if payload.predicted_temperature is not None else 28.0
     bust_occ = payload.bust_occurred if payload.bust_occurred is not None else 0
-    loc = payload.location or "Kolkata"
-    
+    loc = html.escape(str(payload.location or "Kolkata")[:100])
+
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute("""
@@ -349,7 +408,7 @@ def ingest_ground_truth(payload: ActualObservationPayload, user: dict = Depends(
     """, (datetime.utcnow().isoformat(), loc, obs_temp, pred_temp, bust_occ))
     conn.commit()
     conn.close()
-    
+
     return {
         "status": "verified",
         "prediction_id": payload.prediction_id,
@@ -386,6 +445,6 @@ def update_preferences(payload: UserPreferencesPayload, user: dict = Depends(req
 
 
 @app.post("/v1/admin/retrain")
-def trigger_retrain(user: dict = Depends(require_auth_user)):
+def trigger_retrain(user: dict = Depends(require_admin_user)):
     create_database_backup()
     return run_automated_retraining_pipeline()

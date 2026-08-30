@@ -1,7 +1,12 @@
 const API_BASE = "https://veyra-v1-0.onrender.com";
 const CLIENT_TOKEN = "veyra-public-client-token";
 
-// 1. Initialize Interactive Global Leaflet Map
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
 const map = L.map("map").setView([20.0, 0.0], 2);
 
 L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
@@ -9,7 +14,6 @@ L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
   maxZoom: 18,
 }).addTo(map);
 
-// 2. Global Baseline Meteorological Surveillance Zones
 const globalZones = [
   { name: "Indo-Gangetic Basin", bounds: [[20.0, 75.0], [30.0, 90.0]], risk: "MEDIUM", color: "#f59e0b" },
   { name: "Western European Corridor", bounds: [[45.0, -5.0], [58.0, 15.0]], risk: "LOW", color: "#10b981" },
@@ -25,12 +29,11 @@ globalZones.forEach((zone) => {
     fillOpacity: 0.1,
   })
     .addTo(map)
-    .bindPopup(`<b>${zone.name}</b><br>Regional Baseline Risk: ${zone.risk}`);
+    .bindPopup(`<b>${escapeHtml(zone.name)}</b><br>Regional Baseline Risk: ${escapeHtml(zone.risk)}`);
 });
 
 let currentMarker = null;
 
-// 3. Reverse Geocode Coordinates on Map Click
 map.on("click", async (e) => {
   const lat = parseFloat(e.latlng.lat.toFixed(4));
   const lon = parseFloat(e.latlng.lng.toFixed(4));
@@ -40,7 +43,6 @@ map.on("click", async (e) => {
   updateMarker(lat, lon, `Target (${lat}, ${lon})`, "MEDIUM", "#38bdf8");
 });
 
-// 4. Automatic Forward Geocoding Engine
 async function resolveLocationCoordinates(query) {
   if (!query || query.trim().length === 0) return null;
   try {
@@ -63,7 +65,6 @@ async function resolveLocationCoordinates(query) {
   return null;
 }
 
-// 5. Automatic Geocoding Listener on Location Input
 const locationInput = document.getElementById("location");
 let debounceTimer;
 
@@ -92,11 +93,10 @@ function updateMarker(lat, lon, label, risk, color) {
     radius: 10,
   })
     .addTo(map)
-    .bindPopup(`<b>${label}</b><br>State: ${risk}`)
+    .bindPopup(`<b>${escapeHtml(label)}</b><br>State: ${escapeHtml(risk)}`)
     .openPopup();
 }
 
-// 6. Form Submission & Reliability Inference Evaluation
 document.getElementById("prediction-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const btn = document.getElementById("submit-btn");
@@ -109,7 +109,6 @@ document.getElementById("prediction-form").addEventListener("submit", async (e) 
   const variable = document.getElementById("variable").value;
   const leadHours = parseInt(document.getElementById("lead_hours").value, 10);
 
-  // Auto-resolve coordinates if the user only entered a place name
   if (isNaN(lat) || isNaN(lon) || !loc.startsWith("Coordinates")) {
     const resolved = await resolveLocationCoordinates(loc);
     if (resolved) {
@@ -152,7 +151,6 @@ document.getElementById("prediction-form").addEventListener("submit", async (e) 
       throw new Error(data.detail || "Inference evaluation failed");
     }
 
-    // Render Metrics
     document.getElementById("res-location").innerText = data.location;
     document.getElementById("res-prob").innerText = `${(data.bust_probability * 100).toFixed(1)}%`;
 
@@ -184,12 +182,11 @@ document.getElementById("prediction-form").addEventListener("submit", async (e) 
 
     document.getElementById("res-conformal").innerText = `[${data.conformal_lower}°C , ${data.conformal_upper}°C]`;
 
-    // Center and mark prediction point
     map.flyTo([lat, lon], 6, { duration: 1.0 });
     updateMarker(
       lat,
       lon,
-      `${data.location}<br>Risk: ${data.risk_level}<br>Bust Prob: ${(data.bust_probability * 100).toFixed(1)}%`,
+      `${data.location} | Risk: ${data.risk_level} | Bust: ${(data.bust_probability * 100).toFixed(1)}%`,
       data.risk_level,
       color
     );

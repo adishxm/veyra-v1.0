@@ -1,6 +1,7 @@
 import os
 import json
 import joblib
+import math
 import numpy as np
 from typing import Dict, Any, Tuple
 
@@ -30,32 +31,35 @@ class RealMLInferenceEngine:
     @classmethod
     def predict(cls, features: Dict[str, Any]) -> Tuple[float, float, float, float]:
         model, meta = cls.load_model()
-        
+
         lat = float(features.get("latitude", 22.57))
         lon = float(features.get("longitude", 88.36))
         lead_hours = float(features.get("lead_hours", 48))
-        base_temp = float(features.get("temperature", 28.0))
+        target_temp = float(features.get("temperature", 28.0))
         spread = float(features.get("ensemble_spread", 1.2))
         temp_var = float(features.get("temp_variance", 0.45))
-        
-        # 1. Geographic novelty metric
+
+        if any(math.isnan(v) or math.isinf(v) for v in [lat, lon, lead_hours, target_temp, spread, temp_var]):
+            raise ValueError("Non-finite numeric values encountered in inference features")
+
+        # 1. Geographic distance/novelty metric
         novelty = round(abs((lat / 45.0) ** 2 + (lon / 90.0) * 0.1 - 0.5), 3)
-        
-        # 2. Dynamic feature scoring
+
+        # 2. Dynamic ML feature vector
         feat_vector = np.array([[spread, temp_var, 0.0, 0.0, lead_hours, novelty]])
-        
+
         if model is not None:
             raw_prob = float(model.predict_proba(feat_vector)[0, 1])
         else:
-            raw_prob = 0.15 + (spread * 0.12) + (lead_hours / 240.0) * 0.35 + (novelty * 0.05)
-            
-        bust_prob = float(np.clip(raw_prob, 0.05, 0.95))
-        
-        # 3. Dynamic conformal interval scaling
+            raw_prob = 0.15 + (spread * 0.10) + (lead_hours / 240.0) * 0.35 + (novelty * 0.03)
+
+        bust_prob = float(np.clip(raw_prob + (novelty * 0.02), 0.05, 0.95))
+
+        # 3. Dynamic conformal prediction interval centered on the live target temperature
         q90 = float(meta.get("conformal_quantile_90", 0.7228)) if meta else 0.7228
-        margin = round(max(1.2, q90 * (1.0 + (lead_hours / 72.0) * 0.5) * spread), 2)
-        
-        conformal_lower = round(base_temp - margin, 2)
-        conformal_upper = round(base_temp + margin, 2)
-        
+        margin = round(max(1.1, q90 * spread * (1.0 + (lead_hours / 240.0) * 0.5)), 2)
+
+        conformal_lower = round(target_temp - margin, 2)
+        conformal_upper = round(target_temp + margin, 2)
+
         return round(bust_prob, 4), novelty, conformal_lower, conformal_upper
