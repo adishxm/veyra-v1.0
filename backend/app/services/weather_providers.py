@@ -1,25 +1,29 @@
 import httpx
 import math
-import asyncio
+import logging
 import numpy as np
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any
 
+logger = logging.getLogger("veyra.weather")
+
 class MultiProviderWeatherIngestion:
-    """High-resilience global NWP ensemble ingestion with event-loop safe async transport."""
+    """High-resilience global NWP ensemble ingestion with redirect handling and robust fallback."""
 
     @classmethod
     async def fetch_open_meteo_forecast(cls, lat: float, lon: float, lead_hours: int = 48) -> Dict[str, Any]:
         forecast_days = min(16, max(2, int(math.ceil((lead_hours + 24) / 24))))
         url = (
             f"https://api.open-meteo.com/v1/forecast?"
-            f"latitude={lat:.4f}&longitude={lon:.4f}&hourly=temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,precipitation"
-            f"&forecast_days={forecast_days}"
+            f"latitude={lat:.4f}&longitude={lon:.4f}"
+            f"&hourly=temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,precipitation"
+            f"&forecast_days={forecast_days}&timezone=UTC"
         )
 
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(12.0, connect=5.0),
-            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            follow_redirects=True,
+            headers={"User-Agent": "VeyraAtmosphericEngine/2.1 (contact@veyra.io)"}
         ) as client:
             resp = await client.get(url)
             resp.raise_for_status()
@@ -33,7 +37,7 @@ class MultiProviderWeatherIngestion:
         precips = [float(pr) for pr in hourly.get("precipitation", []) if pr is not None]
 
         if not temps or not times:
-            raise ValueError("Empty timeseries returned by primary provider")
+            raise ValueError("Empty timeseries returned by Open-Meteo primary")
 
         now_utc = datetime.now(timezone.utc)
         target_utc = now_utc + timedelta(hours=lead_hours)
@@ -72,30 +76,41 @@ class MultiProviderWeatherIngestion:
     async def fetch_ensemble_secondary(cls, lat: float, lon: float, lead_hours: int = 48) -> Dict[str, Any]:
         url = (
             f"https://ensemble-api.open-meteo.com/v1/ensemble?"
-            f"latitude={lat:.4f}&longitude={lon:.4f}&hourly=temperature_2m&models=gfs_seamless,ecmwf_ifs025"
+            f"latitude={lat:.4f}&longitude={lon:.4f}&hourly=temperature_2m&models=gfs_seamless,ecmwf_ifs025&timezone=UTC"
         )
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(10.0, connect=5.0),
-            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            follow_redirects=True,
+            headers={"User-Agent": "VeyraAtmosphericEngine/2.1 (contact@veyra.io)"}
         ) as client:
             resp = await client.get(url)
-            if resp.status_code == 200:
-                data = resp.json()
-                hourly = data.get("hourly", {})
-                temps = [float(t) for t in hourly.get("temperature_2m", []) if t is not None]
-                if temps:
+            resp.raise_for_status()
+            data = resp.json()
+
+            hourly = data.get("hourly", {})
+            times = hourly.get("time", [])
+            temps = [float(t) for t in hourly.get("temperature_2m", []) if t is not None]
+
+            if temps and times:
+                now_utc = datetime.now(timezone.utc)
+                target_utc = now_utc + timedelta(hours=lead_hours)
+                target_iso_prefix = target_utc.strftime("%Y-%m-%dT%H:00")
+                try:
+                    lead_idx = times.index(target_iso_prefix)
+                except ValueError:
                     lead_idx = min(max(0, lead_hours), len(temps) - 1)
-                    return {
-                        "provider": "open-meteo-ensemble-secondary",
-                        "temperature": round(temps[lead_idx], 2),
-                        "relative_humidity_2m": 50.0,
-                        "surface_pressure": 1013.25,
-                        "precipitation": 0.0,
-                        "ensemble_spread": 1.4,
-                        "temp_variance": 0.5,
-                        "lead_hours": lead_hours,
-                        "status": "nominal"
-                    }
+
+                return {
+                    "provider": "open-meteo-ensemble-secondary",
+                    "temperature": round(temps[lead_idx], 2),
+                    "relative_humidity_2m": 50.0,
+                    "surface_pressure": 1013.25,
+                    "precipitation": 0.0,
+                    "ensemble_spread": 1.4,
+                    "temp_variance": 0.5,
+                    "lead_hours": lead_hours,
+                    "status": "nominal"
+                }
         raise ValueError("Secondary ensemble query failed")
 
     @classmethod
@@ -106,7 +121,7 @@ class MultiProviderWeatherIngestion:
         is_n_summer = 80 <= day_of_year <= 264
 
         if abs_lat <= 23.5:
-            base_temp = 28.0 - (abs_lat * 0.15)
+            base_temp = 30.5 - (abs_lat * 0.10)
         elif abs_lat <= 38.0:
             base_temp = 36.0 if (is_n_summer and lat > 0) else 18.0 if (not is_n_summer and lat > 0) else 24.0
         elif abs_lat <= 60.0:
@@ -119,13 +134,16 @@ class MultiProviderWeatherIngestion:
             else:
                 base_temp = 10.0 - ((abs_lat - 66.0) * 0.45) if is_n_summer else -18.0 - ((abs_lat - 66.0) * 0.75)
 
-        diurnal = 3.5 * math.sin((lead_hours % 24) * (math.pi / 12.0) - 2.0)
+        # Diurnal phase offset synchronized to UTC hour of day
+        current_hour = now.hour
+        target_hour = (current_hour + lead_hours) % 24
+        diurnal = 3.5 * math.sin((target_hour - 8.0) * (math.pi / 12.0))
         final_temp = round(base_temp + diurnal, 2)
 
         return {
             "provider": "planetary-climatology-fallback",
             "temperature": final_temp,
-            "relative_humidity_2m": 45.0,
+            "relative_humidity_2m": 50.0,
             "surface_pressure": 1013.25,
             "precipitation": 0.0,
             "ensemble_spread": 2.2,
@@ -138,12 +156,12 @@ class MultiProviderWeatherIngestion:
     async def get_canonical_forecast(cls, lat: float, lon: float, lead_hours: int = 48) -> Dict[str, Any]:
         try:
             return await cls.fetch_open_meteo_forecast(lat, lon, lead_hours)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[INGEST-WARN] Primary provider failed ({lat},{lon}): {repr(e)}")
 
         try:
             return await cls.fetch_ensemble_secondary(lat, lon, lead_hours)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[INGEST-WARN] Secondary ensemble failed ({lat},{lon}): {repr(e)}")
 
         return cls.calculate_climatological_physics_baseline(lat, lon, lead_hours)
