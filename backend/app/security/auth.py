@@ -1,49 +1,57 @@
 import time
+from typing import Optional, Dict
 from collections import defaultdict
-from fastapi import HTTPException, Security, Request, status
-from fastapi.security.api_key import APIKeyHeader
+from fastapi import Header, HTTPException, Request, status
 
-API_KEY_NAME = "X-API-Key"
-api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
-
-VALID_API_KEYS = {
-    "veyra-live-key-prod-001": {"user_id": "tenant_enterprise", "role": "admin", "rate_limit": 120},
-    "veyra-public-client-token": {"user_id": "frontend_client", "role": "client", "rate_limit": 60}
+VALID_KEYS = {
+    "veyra-live-key-prod-001": {"user_id": "prod-admin", "role": "admin", "rate_limit": 120},
+    "veyra-public-client-token": {"user_id": "public-web-user", "role": "client", "rate_limit": 60},
 }
 
-RATE_LIMIT_STORE = defaultdict(list)
+# Sliding window rate limiter: identifier -> list of timestamps
+RATE_LIMIT_BUCKETS = defaultdict(list)
 
-async def require_auth_user(api_key: str = Security(api_key_header)):
-    if not api_key:
+def check_rate_limit(request: Request, user: dict):
+    """Enforces per-key sliding window rate limit with Retry-After headers."""
+    identifier = user.get("user_id") or (request.client.host if request.client else "anonymous")
+    limit = user.get("rate_limit", 60)
+    now = time.time()
+    
+    # Prune timestamps older than 60 seconds
+    timestamps = [t for t in RATE_LIMIT_BUCKETS[identifier] if now - t < 60.0]
+    
+    if len(timestamps) >= limit:
+        retry_after = int(60.0 - (now - timestamps[0])) if timestamps else 60
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Rate limit exceeded: maximum {limit} requests per minute.",
+            headers={"Retry-After": str(max(1, retry_after))}
+        )
+        
+    timestamps.append(now)
+    RATE_LIMIT_BUCKETS[identifier] = timestamps
+
+def require_auth_user(x_api_key: Optional[str] = Header(None, alias="X-API-Key")) -> dict:
+    """Strictly validates presence of X-API-Key. Rejects missing or bad credentials with 401."""
+    if not x_api_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing required X-API-Key header"
         )
-    if api_key not in VALID_API_KEYS:
+    if x_api_key not in VALID_KEYS:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired API Key credential"
+            detail="Invalid API Key"
         )
-    return VALID_API_KEYS[api_key]
+    return VALID_KEYS[x_api_key]
 
-async def optional_auth_user(api_key: str = Security(api_key_header)):
-    if not api_key:
-        return {"user_id": "anonymous_public", "role": "anonymous", "rate_limit": 30}
-    if api_key not in VALID_API_KEYS:
+def optional_auth_user(x_api_key: Optional[str] = Header(None, alias="X-API-Key")) -> Optional[dict]:
+    """Optional auth for public health/status probes."""
+    if not x_api_key:
+        return None
+    if x_api_key not in VALID_KEYS:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired API Key credential"
+            detail="Invalid API Key"
         )
-    return VALID_API_KEYS[api_key]
-
-def check_rate_limit(request: Request, user: dict):
-    client_ip = request.client.host if request.client else "127.0.0.1"
-    key = f"{user['user_id']}:{client_ip}"
-    now = time.time()
-    RATE_LIMIT_STORE[key] = [ts for ts in RATE_LIMIT_STORE[key] if now - ts < 60]
-    if len(RATE_LIMIT_STORE[key]) >= user["rate_limit"]:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Rate limit exceeded: max {user['rate_limit']} requests per minute"
-        )
-    RATE_LIMIT_STORE[key].append(now)
+    return VALID_KEYS[x_api_key]

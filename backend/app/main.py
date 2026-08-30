@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, Depends, Request, Query, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from backend.app.security.auth import require_auth_user, optional_auth_user, check_rate_limit
@@ -29,10 +29,35 @@ app = FastAPI(
     description="Production Numerical Weather Prediction Reliability & Bust Intelligence System"
 )
 
-# S-3: Standard Security Headers Middleware
+# Exception Handler for Deep Nesting Recursion Attacks (Weakness B Fix)
+@app.exception_handler(RecursionError)
+async def recursion_exception_handler(request: Request, exc: RecursionError):
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={"detail": "Payload structure rejected: recursion depth limit exceeded"}
+    )
+
+# Security Headers & 2MB Request Size Limiter Middleware (Weakness D & S-3 Fix)
 @app.middleware("http")
-async def add_security_headers(request: Request, call_next):
-    response = await call_next(request)
+async def security_and_payload_guard_middleware(request: Request, call_next):
+    # Enforce 2MB maximum payload limit
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > 2 * 1024 * 1024:  # 2MB
+                return PlainTextResponse("Payload Too Large: maximum allowed body is 2MB", status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
+        except ValueError:
+            pass
+
+    try:
+        response = await call_next(request)
+    except RecursionError:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"detail": "Payload structure rejected: recursion depth limit exceeded"}
+        )
+
+    # Standard security defense headers
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
@@ -54,7 +79,6 @@ METRICS = {
     "risk_tiers": {"LOW": 0, "MEDIUM": 0, "HIGH": 0, "CRITICAL": 0}
 }
 
-# C-2: Validated Weather Variable Enum
 class SupportedWeatherVariable(str, Enum):
     temperature_2m = "temperature_2m"
     relative_humidity_2m = "relative_humidity_2m"
@@ -122,7 +146,7 @@ def prometheus_metrics():
     )
 
 
-# D-1: Synchronize Registry Metrics with Active Validation State
+# D-1: Synchronized Model Registry
 @app.get("/v1/models")
 def list_models():
     return {
@@ -150,7 +174,7 @@ def list_models():
     }
 
 
-# S-1: Enforce Strict Authentication on Inference Path
+# S-1: Strictly Enforced Authentication on Inference
 @app.post("/v1/predict")
 async def predict_single(req: PredictRequest, request: Request, user: dict = Depends(require_auth_user)):
     check_rate_limit(request, user)
@@ -223,22 +247,39 @@ async def predict_batch(req: BatchPredictRequest, request: Request, user: dict =
             })
             failed_count += 1
         else:
-            pred_req = PredictRequest(
-                location=item.location or "Target",
-                latitude=item.latitude,
-                longitude=item.longitude,
-                variable=item.variable or SupportedWeatherVariable.temperature_2m,
-                lead_hours=item.lead_hours or 48
-            )
-            res = await predict_single(pred_req, request, user)
-            results.append({
-                "location": item.location,
+            weather = await MultiProviderWeatherIngestion.get_canonical_forecast(item.latitude, item.longitude)
+            feature_dict = {
+                "latitude": item.latitude,
+                "longitude": item.longitude,
+                "temperature": weather["temperature"],
+                "ensemble_spread": weather.get("ensemble_spread", 1.2),
+                "temp_variance": weather.get("temp_variance", 0.45),
+                "lead_hours": item.lead_hours or 48
+            }
+            bust_prob, novelty_score, conformal_lower, conformal_upper = RealMLInferenceEngine.predict(feature_dict)
+            risk_level = "LOW" if bust_prob < 0.30 else "MEDIUM" if bust_prob < 0.60 else "HIGH" if bust_prob < 0.85 else "CRITICAL"
+            
+            res_item = {
+                "location": item.location or "Target",
                 "latitude": item.latitude,
                 "longitude": item.longitude,
                 "success": True,
-                **res,
+                "bust_probability": bust_prob,
+                "risk_level": risk_level,
+                "trust_state": "SUPPORTED" if novelty_score < 3.0 else "DEGRADED",
+                "abstain": False,
+                "novelty_score": novelty_score,
+                "conformal_lower": conformal_lower,
+                "conformal_upper": conformal_upper,
+                "provider_provenance": weather.get("provider", "open-meteo-primary"),
+                "reason_codes": ["VALID_INPUT"],
+                "evidence": ["nominal_atmospheric_stability", f"provider:{weather.get('provider', 'open-meteo-primary')}"],
+                "model_version": "personal-veyra-ml-v2.1.0-ml-prod",
+                "feature_schema_version": "personal-veyra-features-v2",
+                "data_version": "open-meteo-live-v2",
                 "error": None
-            })
+            }
+            results.append(res_item)
             successful_count += 1
 
     return {
