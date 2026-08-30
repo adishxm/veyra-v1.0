@@ -1,11 +1,11 @@
-from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.app.features.basic import FEATURE_SCHEMA_VERSION, build_features
 from backend.app.model.baseline import BaselineReliabilityScorer
 from backend.app.safety.evaluator import evaluate
-from backend.app.weather.schemas import EnsembleForecast, ForecastRequest
+from backend.app.weather.client import fetch_ensemble_forecast
+from backend.app.weather.schemas import ForecastRequest
 
 router = APIRouter(prefix="/v1", tags=["prediction"])
 scorer = BaselineReliabilityScorer()
@@ -37,37 +37,35 @@ class PredictionResponse(BaseModel):
 
 
 @router.post("/predict", response_model=PredictionResponse)
-def predict(request: ForecastRequest) -> PredictionResponse:
+async def predict(request: ForecastRequest) -> PredictionResponse:
     if request.latitude is None or request.longitude is None:
         raise HTTPException(status_code=422, detail="latitude and longitude are required for V0.1")
 
-    now = datetime.now(timezone.utc)
+    # 1. Fetch live multi-member ensemble NWP forecast data
+    try:
+        forecast = await fetch_ensemble_forecast(
+            location=request.location,
+            latitude=request.latitude,
+            longitude=request.longitude,
+            variable=request.variable,
+            lead_hours=request.lead_hours,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to fetch live ensemble forecast upstream: {str(exc)}",
+        )
 
-    # Synthetic ensemble fixture (will be wired to real NWP provider in next phase)
-    forecast = EnsembleForecast(
-        location=request.location,
-        latitude=request.latitude,
-        longitude=request.longitude,
-        variable=request.variable,
-        issue_time=now,
-        valid_time=now + timedelta(hours=request.lead_hours),
-        lead_hours=request.lead_hours,
-        values=[20.0, 21.0, 22.0, 24.0, 25.0],
-        unit="provider-fixture",
-        provider="development-fixture",
-        data_version="fixture-v1",
-    )
-
-    # 1. Feature extraction
+    # 2. Extract statistical and distributional features
     features = build_features(forecast)
 
-    # 2. Baseline inference & dynamic evidence attribution
+    # 3. Model inference and dynamic evidence attribution
     result = scorer.predict_probability(features)
 
-    # 3. Safety guardrails & trust evaluation
+    # 4. Safety guardrails and trust evaluation
     safety = evaluate(feature_values=features, probability=result.probability)
 
-    # 4. Construct calibrated response with safety gating
+    # 5. Format response
     return PredictionResponse(
         location=request.location,
         bust_probability=None if safety.abstain else result.probability,
