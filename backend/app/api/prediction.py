@@ -7,13 +7,12 @@ from sqlalchemy.orm import Session
 from backend.app.db.models import PredictionLog
 from backend.app.db.session import get_db
 from backend.app.features.basic import FEATURE_SCHEMA_VERSION, build_features
-from backend.app.model.baseline import BaselineReliabilityScorer
+from backend.app.model.registry import model_registry
 from backend.app.safety.evaluator import evaluate
 from backend.app.weather.schemas import ForecastRequest
 from backend.app.weather.service import weather_service
 
 router = APIRouter(prefix="/v1", tags=["prediction"])
-scorer = BaselineReliabilityScorer()
 
 
 class PredictionResponse(BaseModel):
@@ -59,7 +58,7 @@ async def predict(
             status_code=422, detail="latitude and longitude are required for V0.1"
         )
 
-    # 1. Fetch ensemble data with automatic fallback failover
+    # 1. Multi-provider ensemble fetch with failover
     try:
         forecast = await weather_service.get_forecast(
             location=request.location,
@@ -74,12 +73,17 @@ async def predict(
             detail=f"Failed to fetch ensemble forecast across all providers: {str(exc)}",
         )
 
-    # 2. Compute features & score probability
+    # 2. Feature Extraction
     features = build_features(forecast)
-    result = scorer.predict_probability(features)
+
+    # 3. Model Registry Dynamic Inference
+    active_scorer, metadata = model_registry.get_active_model()
+    result = active_scorer.predict_probability(features)
+
+    # 4. Safety Guardrails & Trust Gating
     safety = evaluate(feature_values=features, probability=result.probability)
 
-    # 3. Log to SQLite
+    # 5. SQLite Audit Persistence
     log_entry = PredictionLog(
         location=request.location,
         latitude=request.latitude,
@@ -112,11 +116,19 @@ async def predict(
     )
 
 
+@router.get("/models", tags=["model-registry"])
+def list_registered_models():
+    """List all registered models, current active version, and validation metrics."""
+    return {
+        "active_version": model_registry._active_version,
+        "models": list(model_registry._metadata.values()),
+    }
+
+
 @router.post("/actuals", tags=["evaluation"])
 def log_actual_observation(
     payload: ActualObservationRequest, db: Session = Depends(get_db)
 ):
-    """Log ground-truth weather observation to score prediction accuracy."""
     record = db.query(PredictionLog).filter(PredictionLog.id == payload.prediction_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="Prediction record not found")
@@ -142,7 +154,6 @@ def log_actual_observation(
 
 @router.get("/metrics", tags=["evaluation"])
 def get_evaluation_metrics(db: Session = Depends(get_db)):
-    """Calculate Brier score and accuracy metrics over verified predictions."""
     verified = (
         db.query(PredictionLog)
         .filter(PredictionLog.verified_at.isnot(None))
@@ -182,7 +193,6 @@ def get_evaluation_metrics(db: Session = Depends(get_db)):
 
 @router.get("/logs", tags=["prediction"])
 def get_prediction_logs(limit: int = 10, db: Session = Depends(get_db)):
-    """Retrieve recent prediction audit records."""
     return (
         db.query(PredictionLog)
         .order_by(PredictionLog.id.desc())
