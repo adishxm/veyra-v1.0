@@ -11,6 +11,7 @@ from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, Depends, Request, Query, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, JSONResponse
+from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field, field_validator
 
 from backend.app.security.auth import require_auth_user, require_admin_user, optional_auth_user, check_rate_limit
@@ -31,6 +32,21 @@ app = FastAPI(
     description="Production Numerical Weather Prediction Reliability & Bust Intelligence System"
 )
 
+# Intercept Validation and Type Conversion Errors to guarantee 422
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": "Input validation error", "errors": exc.errors() if hasattr(exc, "errors") else str(exc)}
+    )
+
+@app.exception_handler(ValueError)
+async def value_error_exception_handler(request: Request, exc: ValueError):
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": f"Numeric or format validation error: {str(exc)}"}
+    )
+
 @app.exception_handler(RecursionError)
 async def recursion_exception_handler(request: Request, exc: RecursionError):
     return JSONResponse(
@@ -38,6 +54,7 @@ async def recursion_exception_handler(request: Request, exc: RecursionError):
         content={"detail": "Payload structure rejected: recursion depth limit exceeded"}
     )
 
+# Security Headers & 2MB Request Size Limiter Middleware
 @app.middleware("http")
 async def security_and_payload_guard_middleware(request: Request, call_next):
     content_length = request.headers.get("content-length")
@@ -50,6 +67,11 @@ async def security_and_payload_guard_middleware(request: Request, call_next):
 
     try:
         response = await call_next(request)
+    except (ValueError, RequestValidationError):
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={"detail": "Input validation error"}
+        )
     except RecursionError:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -95,6 +117,8 @@ class PredictRequest(BaseModel):
     @field_validator("latitude", "longitude", mode="before")
     @classmethod
     def check_finite_coords(cls, v):
+        if isinstance(v, bool):
+            raise ValueError("Coordinates cannot be boolean")
         try:
             val = float(v)
             if math.isnan(val) or math.isinf(val):
@@ -106,13 +130,13 @@ class PredictRequest(BaseModel):
     @field_validator("lead_hours", mode="before")
     @classmethod
     def check_finite_lead(cls, v):
+        if isinstance(v, bool):
+            raise ValueError("Boolean values are not allowed for lead_hours")
         try:
-            if isinstance(v, bool):
-                raise ValueError("Boolean values are not allowed for lead_hours")
             val = float(v)
-            if math.isnan(val) or math.isinf(val) or not float(v).is_integer():
+            if math.isnan(val) or math.isinf(val) or not val.is_integer():
                 raise ValueError("lead_hours must be a finite integer")
-            return int(v)
+            return int(val)
         except (TypeError, ValueError):
             raise ValueError("lead_hours must be a valid integer")
 
@@ -147,7 +171,7 @@ class BatchItemRequest(BaseModel):
             val = float(v)
             if math.isnan(val) or math.isinf(val):
                 return 48
-            return int(v)
+            return int(val)
         except (TypeError, ValueError):
             return 48
 
