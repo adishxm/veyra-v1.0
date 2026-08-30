@@ -52,9 +52,10 @@ class RealMLInferenceEngine:
 
         bust_prob = float(np.clip(raw_prob + (novelty * 0.02), 0.05, 0.95))
 
-        # Dynamically sized conformal prediction interval centered on the live target forecast
+        # Dynamic conformal interval scaled to local variance and atmospheric lead
         q90 = float(meta.get("conformal_quantile_90", 0.7228)) if meta else 0.7228
-        margin = round(max(1.8, q90 * spread * 1.6 * (1.0 + (lead_hours / 240.0) * 0.5)), 2)
+        base_radius = max(2.2, q90 * spread * 1.8 * (1.0 + (lead_hours / 240.0) * 0.5))
+        margin = round(base_radius, 2)
 
         conformal_lower = round(target_temp - margin, 2)
         conformal_upper = round(target_temp + margin, 2)
