@@ -1,5 +1,4 @@
 from fastapi.testclient import TestClient
-
 from backend.app.main import app
 
 client = TestClient(app)
@@ -10,6 +9,6 @@ def test_health() -> None:
     assert response.status_code == 200
     assert response.json() == {
         "status": "ok",
-        "service": "veyra-v3-personal",
-        "version": "3.0.0-dev",
+        "service": "veyra-v1-personal",
+        "version": "1.0.0",
     }

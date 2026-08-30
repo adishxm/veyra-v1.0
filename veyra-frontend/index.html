@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Veyra V1.0 Dashboard</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f1f5f9;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    .card {
+      background: #ffffff;
+      padding: 28px;
+      border-radius: 12px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+      width: 100%;
+      max-width: 520px;
+    }
+    h2 {
+      margin-top: 0;
+      color: #0f172a;
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .form-group {
+      margin-bottom: 12px;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #334155;
+      margin-bottom: 4px;
+    }
+    input {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 16px;
+    }
+    button {
+      flex: 1;
+      background-color: #2563eb;
+      color: white;
+      border: none;
+      padding: 10px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button.secondary {
+      background-color: #64748b;
+    }
+    button:hover {
+      opacity: 0.9;
+    }
+    pre {
+      background-color: #0f172a;
+      color: #38bdf8;
+      padding: 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      overflow-x: auto;
+      margin-top: 18px;
+      min-height: 60px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h2>Veyra Prediction Portal</h2>
+
+    <div class="btn-row">
+      <button class="secondary" onclick="checkHealth()">Ping Health</button>
+    </div>
+
+    <hr style="margin: 18px 0; border: 0; border-top: 1px solid #e2e8f0;" />
+
+    <div class="form-group">
+      <label for="location">Location Name:</label>
+      <input type="text" id="location" value="Station-A" />
+    </div>
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label for="lat">Latitude:</label>
+        <input type="number" id="lat" value="22.5726" step="0.0001" />
+      </div>
+
+      <div class="form-group">
+        <label for="lon">Longitude:</label>
+        <input type="number" id="lon" value="88.3639" step="0.0001" />
+      </div>
+    </div>
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label for="temp">Temperature (°C):</label>
+        <input type="number" id="temp" value="28.5" step="0.1" />
+      </div>
+
+      <div class="form-group">
+        <label for="humidity">Humidity (%):</label>
+        <input type="number" id="humidity" value="65" />
+      </div>
+    </div>
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label for="wind">Wind Speed (km/h):</label>
+        <input type="number" id="wind" value="12.0" step="0.1" />
+      </div>
+
+      <div class="form-group">
+        <label for="pressure">Pressure (hPa):</label>
+        <input type="number" id="pressure" value="1012" />
+      </div>
+    </div>
+
+    <button onclick="runPrediction()">Run Prediction</button>
+
+    <pre id="output">Status: Ready</pre>
+  </div>
+
+  <script>
+    const BASE_URL = "https://veyra-v1-0.onrender.com";
+
+    async function checkHealth() {
+      const output = document.getElementById("output");
+      output.innerText = "Checking health...";
+      try {
+        const res = await fetch(`${BASE_URL}/health`);
+        const data = await res.json();
+        output.innerText = JSON.stringify(data, null, 2);
+      } catch (err) {
+        output.innerText = "Error: " + err.message;
+      }
+    }
+
+    async function runPrediction() {
+      const output = document.getElementById("output");
+      output.innerText = "Running inference...";
+
+      const payload = {
+        location: document.getElementById("location").value,
+        latitude: parseFloat(document.getElementById("lat").value),
+        longitude: parseFloat(document.getElementById("lon").value),
+        temperature: parseFloat(document.getElementById("temp").value),
+        humidity: parseFloat(document.getElementById("humidity").value),
+        wind_speed: parseFloat(document.getElementById("wind").value),
+        pressure: parseFloat(document.getElementById("pressure").value)
+      };
+
+      try {
+        const res = await fetch(`${BASE_URL}/v1/predict`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          const errorDetail = await res.text();
+          throw new Error(`HTTP ${res.status}: ${errorDetail}`);
+        }
+
+        const data = await res.json();
+        output.innerText = JSON.stringify(data, null, 2);
+      } catch (err) {
+        output.innerText = "Prediction Request Failed:\n" + err.message;
+      }
+    }
+  </script>
+
+</body>
+</html>
