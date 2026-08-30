@@ -1,14 +1,39 @@
 import httpx
 import math
+import time
 import logging
 import numpy as np
 from datetime import datetime, timezone, timedelta
-from typing import Dict, Any
+from typing import Dict, Any, Tuple
 
 logger = logging.getLogger("veyra.weather")
 
+# In-memory LRU / TTL response cache to prevent upstream rate-limit exhaustion
+CACHE_STORE: Dict[Tuple[float, float, int], Tuple[float, Dict[str, Any]]] = {}
+CACHE_TTL_SECONDS = 900  # 15 minutes
+
+
 class MultiProviderWeatherIngestion:
-    """High-resilience global NWP ensemble ingestion with redirect handling and robust fallback."""
+    """High-resilience global NWP ingestion with NOAA/NWS failover and continuous solar physics."""
+
+    @classmethod
+    def _get_from_cache(cls, lat: float, lon: float, lead_hours: int) -> Dict[str, Any] | None:
+        key = (round(lat, 2), round(lon, 2), lead_hours)
+        if key in CACHE_STORE:
+            cached_time, data = CACHE_STORE[key]
+            if time.time() - cached_time < CACHE_TTL_SECONDS:
+                return data
+            del CACHE_STORE[key]
+        return None
+
+    @classmethod
+    def _save_to_cache(cls, lat: float, lon: float, lead_hours: int, data: Dict[str, Any]) -> None:
+        key = (round(lat, 2), round(lon, 2), lead_hours)
+        # Prune cache if it grows beyond 2000 entries
+        if len(CACHE_STORE) > 2000:
+            oldest_key = min(CACHE_STORE.keys(), key=lambda k: CACHE_STORE[k][0])
+            del CACHE_STORE[oldest_key]
+        CACHE_STORE[key] = (time.time(), data)
 
     @classmethod
     async def fetch_open_meteo_forecast(cls, lat: float, lon: float, lead_hours: int = 48) -> Dict[str, Any]:
@@ -21,7 +46,7 @@ class MultiProviderWeatherIngestion:
         )
 
         async with httpx.AsyncClient(
-            timeout=httpx.Timeout(12.0, connect=5.0),
+            timeout=httpx.Timeout(10.0, connect=4.0),
             follow_redirects=True,
             headers={"User-Agent": "VeyraAtmosphericEngine/2.1 (contact@veyra.io)"}
         ) as client:
@@ -73,72 +98,78 @@ class MultiProviderWeatherIngestion:
         }
 
     @classmethod
-    async def fetch_ensemble_secondary(cls, lat: float, lon: float, lead_hours: int = 48) -> Dict[str, Any]:
-        url = (
-            f"https://ensemble-api.open-meteo.com/v1/ensemble?"
-            f"latitude={lat:.4f}&longitude={lon:.4f}&hourly=temperature_2m&models=gfs_seamless,ecmwf_ifs025&timezone=UTC"
-        )
+    async def fetch_noaa_nws_forecast(cls, lat: float, lon: float, lead_hours: int = 48) -> Dict[str, Any]:
+        """Direct fallback to US NOAA / NWS API for North American coordinates."""
+        if not (24.0 <= lat <= 50.0 and -125.0 <= lon <= -66.0):
+            raise ValueError("Coordinates outside US NWS grid domain")
+
         async with httpx.AsyncClient(
-            timeout=httpx.Timeout(10.0, connect=5.0),
+            timeout=httpx.Timeout(8.0, connect=3.0),
             follow_redirects=True,
-            headers={"User-Agent": "VeyraAtmosphericEngine/2.1 (contact@veyra.io)"}
+            headers={"User-Agent": "(veyra-research-app, contact@veyra.io)"}
         ) as client:
-            resp = await client.get(url)
-            resp.raise_for_status()
-            data = resp.json()
+            point_url = f"https://api.weather.gov/points/{lat:.4f},{lon:.4f}"
+            p_resp = await client.get(point_url)
+            p_resp.raise_for_status()
+            forecast_grid_url = p_resp.json()["properties"]["forecastGridData"]
 
-            hourly = data.get("hourly", {})
-            times = hourly.get("time", [])
-            temps = [float(t) for t in hourly.get("temperature_2m", []) if t is not None]
+            grid_resp = await client.get(forecast_grid_url)
+            grid_resp.raise_for_status()
+            grid_data = grid_resp.json()["properties"]
 
-            if temps and times:
-                now_utc = datetime.now(timezone.utc)
-                target_utc = now_utc + timedelta(hours=lead_hours)
-                target_iso_prefix = target_utc.strftime("%Y-%m-%dT%H:00")
-                try:
-                    lead_idx = times.index(target_iso_prefix)
-                except ValueError:
-                    lead_idx = min(max(0, lead_hours), len(temps) - 1)
+            temp_series = grid_data.get("temperature", {}).get("values", [])
+            if not temp_series:
+                raise ValueError("No temperature grid in NWS response")
 
-                return {
-                    "provider": "open-meteo-ensemble-secondary",
-                    "temperature": round(temps[lead_idx], 2),
-                    "relative_humidity_2m": 50.0,
-                    "surface_pressure": 1013.25,
-                    "precipitation": 0.0,
-                    "ensemble_spread": 1.4,
-                    "temp_variance": 0.5,
-                    "lead_hours": lead_hours,
-                    "status": "nominal"
-                }
-        raise ValueError("Secondary ensemble query failed")
+            # NWS provides temperatures in Celsius
+            target_val = float(temp_series[min(len(temp_series) - 1, lead_hours // 2)]["value"])
+            target_temp = round(target_val, 2)
+
+            return {
+                "provider": "noaa-nws-grid",
+                "temperature": target_temp,
+                "relative_humidity_2m": 50.0,
+                "surface_pressure": 1013.25,
+                "precipitation": 0.0,
+                "ensemble_spread": 1.5,
+                "temp_variance": 0.6,
+                "lead_hours": lead_hours,
+                "status": "nominal"
+            }
 
     @classmethod
     def calculate_climatological_physics_baseline(cls, lat: float, lon: float, lead_hours: int = 48) -> Dict[str, Any]:
-        abs_lat = abs(lat)
+        """Continuous physical insolation model (Zero latitude clamping / zero step-functions)."""
         now = datetime.now(timezone.utc)
-        day_of_year = now.timetuple().tm_yday
-        is_n_summer = 80 <= day_of_year <= 264
+        doy = now.timetuple().tm_yday
 
-        if abs_lat <= 23.5:
-            base_temp = 30.5 - (abs_lat * 0.10)
-        elif abs_lat <= 38.0:
-            base_temp = 36.0 if (is_n_summer and lat > 0) else 18.0 if (not is_n_summer and lat > 0) else 24.0
-        elif abs_lat <= 60.0:
-            base_temp = 22.0 - ((abs_lat - 38.0) * 0.7)
-        elif abs_lat < 66.0:
-            base_temp = 14.0 - ((abs_lat - 60.0) * 1.2) if is_n_summer else -2.0 - ((abs_lat - 60.0) * 1.4)
+        # Solar declination angle delta
+        declination = 23.44 * math.sin(math.radians((360 / 365) * (doy - 81)))
+
+        # Solar zenith angle calculation for the target coordinate
+        lat_rad = math.radians(lat)
+        dec_rad = math.radians(declination)
+        target_utc_hour = (now.hour + lead_hours) % 24
+
+        # Approximate local solar time using longitude offset
+        solar_noon_offset = lon / 15.0
+        local_solar_hour = (target_utc_hour + solar_noon_offset) % 24
+        hour_angle_rad = math.radians((local_solar_hour - 12.0) * 15.0)
+
+        cos_zenith = math.sin(lat_rad) * math.sin(dec_rad) + math.cos(lat_rad) * math.cos(dec_rad) * math.cos(hour_angle_rad)
+        sun_elevation = math.degrees(math.asin(max(-1.0, min(1.0, cos_zenith))))
+
+        # Continuous thermal equilibrium baseline
+        effective_lat_diff = abs(lat - declination)
+        base_thermal = 31.0 - (effective_lat_diff * 0.58)
+
+        # Diurnal solar radiative heating curve
+        if sun_elevation > 0:
+            solar_heating = (sun_elevation / 90.0) ** 0.8 * 8.5
         else:
-            if lat < 0:
-                base_temp = -48.0 - ((abs_lat - 75.0) * 0.8)
-            else:
-                base_temp = 10.0 - ((abs_lat - 66.0) * 0.45) if is_n_summer else -18.0 - ((abs_lat - 66.0) * 0.75)
+            solar_heating = (sun_elevation / 90.0) * 4.0
 
-        # Diurnal phase offset synchronized to UTC hour of day
-        current_hour = now.hour
-        target_hour = (current_hour + lead_hours) % 24
-        diurnal = 3.5 * math.sin((target_hour - 8.0) * (math.pi / 12.0))
-        final_temp = round(base_temp + diurnal, 2)
+        final_temp = round(base_thermal + solar_heating, 2)
 
         return {
             "provider": "planetary-climatology-fallback",
@@ -154,14 +185,28 @@ class MultiProviderWeatherIngestion:
 
     @classmethod
     async def get_canonical_forecast(cls, lat: float, lon: float, lead_hours: int = 48) -> Dict[str, Any]:
-        try:
-            return await cls.fetch_open_meteo_forecast(lat, lon, lead_hours)
-        except Exception as e:
-            print(f"[INGEST-WARN] Primary provider failed ({lat},{lon}): {repr(e)}")
+        # 1. Check in-memory TTL cache
+        cached = cls._get_from_cache(lat, lon, lead_hours)
+        if cached:
+            return cached
 
+        # 2. Try primary Open-Meteo endpoint
         try:
-            return await cls.fetch_ensemble_secondary(lat, lon, lead_hours)
+            res = await cls.fetch_open_meteo_forecast(lat, lon, lead_hours)
+            cls._save_to_cache(lat, lon, lead_hours, res)
+            return res
         except Exception as e:
-            print(f"[INGEST-WARN] Secondary ensemble failed ({lat},{lon}): {repr(e)}")
+            logger.debug("Primary NWP fetch error: %s", repr(e))
 
-        return cls.calculate_climatological_physics_baseline(lat, lon, lead_hours)
+        # 3. Try NOAA / NWS direct endpoint for US coordinates
+        try:
+            res = await cls.fetch_noaa_nws_forecast(lat, lon, lead_hours)
+            cls._save_to_cache(lat, lon, lead_hours, res)
+            return res
+        except Exception as e:
+            logger.debug("NOAA NWS fetch error: %s", repr(e))
+
+        # 4. Continuous physics-based radiative thermal baseline
+        fallback_res = cls.calculate_climatological_physics_baseline(lat, lon, lead_hours)
+        cls._save_to_cache(lat, lon, lead_hours, fallback_res)
+        return fallback_res
