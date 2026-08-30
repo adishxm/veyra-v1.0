@@ -32,7 +32,7 @@ app = FastAPI(
     description="Production Numerical Weather Prediction Reliability & Bust Intelligence System"
 )
 
-# 1. Safe JSON-Serializable Validation Exception Handler (Fixes Type Regression 500 -> 422)
+# 1. Validation & Recursion Exception Handlers (Guarantees clean 422/400 without 500 crashes)
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     return JSONResponse(
@@ -54,7 +54,7 @@ async def recursion_exception_handler(request: Request, exc: RecursionError):
         content={"detail": "Payload structure rejected: recursion depth limit exceeded"}
     )
 
-# 2. Security Headers & Request Body Guard Middleware
+# 2. Security Defense Headers & 2MB Body Size Guard Middleware
 @app.middleware("http")
 async def security_and_payload_guard_middleware(request: Request, call_next):
     content_length = request.headers.get("content-length")
@@ -141,6 +141,34 @@ class BatchItemRequest(BaseModel):
     longitude: Optional[float] = None
     variable: Optional[SupportedWeatherVariable] = SupportedWeatherVariable.temperature_2m
     lead_hours: Optional[int] = 48
+
+    @field_validator("latitude", "longitude", mode="before")
+    @classmethod
+    def validate_finite_batch_coords(cls, v):
+        if v is None:
+            return None
+        try:
+            val = float(v)
+            if math.isnan(val) or math.isinf(val):
+                return None
+            return val
+        except (TypeError, ValueError):
+            return None
+
+    @field_validator("lead_hours", mode="before")
+    @classmethod
+    def validate_finite_batch_lead(cls, v):
+        if v is None:
+            return 48
+        try:
+            if isinstance(v, bool):
+                return 48
+            val = float(v)
+            if math.isnan(val) or math.isinf(val):
+                return 48
+            return int(val)
+        except (TypeError, ValueError):
+            return 48
 
 class BatchPredictRequest(BaseModel):
     items: List[BatchItemRequest]
@@ -360,8 +388,9 @@ def get_async_job(job_id: str, user: dict = Depends(require_auth_user)):
     return job
 
 
+# 3. Role-Scoped Log Access (Admin Only)
 @app.get("/v1/logs")
-def get_prediction_logs(limit: int = Query(default=100, ge=1, le=1000), user: dict = Depends(require_auth_user)):
+def get_prediction_logs(limit: int = Query(default=100, ge=1, le=1000), user: dict = Depends(require_admin_user)):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute("SELECT id, timestamp, location, latitude, longitude, bust_prob, risk_level, trust_state, model_version FROM predictions ORDER BY id DESC LIMIT ?", (limit,))
@@ -384,6 +413,7 @@ def get_prediction_logs(limit: int = Query(default=100, ge=1, le=1000), user: di
     ]
 
 
+# 4. Scoped Ground Truth Writes (Admin Only)
 @app.post("/v1/actuals")
 def ingest_ground_truth(payload: ActualObservationPayload, user: dict = Depends(require_admin_user)):
     obs_temp = payload.actual_value if payload.actual_value is not None else payload.observed_temperature if payload.observed_temperature is not None else 28.5
@@ -435,6 +465,7 @@ def update_preferences(payload: UserPreferencesPayload, user: dict = Depends(req
     return {"status": "success", "message": "Preferences saved successfully"}
 
 
+# 5. Scoped Retrain Trigger (Admin Only)
 @app.post("/v1/admin/retrain")
 def trigger_retrain(user: dict = Depends(require_admin_user)):
     create_database_backup()

@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Veyra | Forecast Reliability &amp; Bust Intelligence — Research Environment</title>
+  <title>Veyra | Forecast Reliability &amp; Bust Intelligence</title>
 
   <!-- Leaflet + Google Fonts -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&family=Merriweather:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
 
   <style>
     :root {
@@ -47,15 +47,11 @@
       font-family: 'JetBrains Mono', monospace;
     }
 
-    .serif {
-      font-family: 'Merriweather', serif;
-    }
-
     /* ============ Header ============ */
     .agency-banner {
       background-color: var(--noaa-dark-blue);
       color: white;
-      padding: 10px 24px;
+      padding: 12px 24px;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -63,7 +59,7 @@
     }
 
     .agency-title {
-      font-size: 1.2rem;
+      font-size: 1.25rem;
       font-weight: 700;
       letter-spacing: 0.5px;
     }
@@ -104,29 +100,17 @@
     .main-nav {
       background-color: var(--noaa-blue);
       display: flex;
-      flex-wrap: wrap;
-      padding: 0 16px;
+      padding: 0 24px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
 
-    .main-nav a {
+    .main-nav span {
       color: white;
-      text-decoration: none;
       padding: 10px 16px;
       font-size: 0.9rem;
-      font-weight: 500;
-      border-bottom: 3px solid transparent;
-    }
-
-    .main-nav a:hover {
-      background-color: rgba(255,255,255,0.1);
-      border-bottom-color: #ffd200;
-    }
-
-    .main-nav a.active {
-      background-color: rgba(255,255,255,0.15);
-      border-bottom-color: #ffd200;
       font-weight: 600;
+      background-color: rgba(255,255,255,0.15);
+      border-bottom: 3px solid #ffd200;
     }
 
     /* ============ Layout ============ */
@@ -136,11 +120,6 @@
       color: var(--noaa-muted);
       max-width: 1200px;
       margin: 0 auto;
-    }
-
-    .breadcrumb a {
-      color: var(--noaa-accent);
-      text-decoration: none;
     }
 
     .container {
@@ -257,35 +236,11 @@
       margin-top: 10px;
     }
 
-    .table-verification {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.9rem;
-      margin-top: 15px;
-    }
-
-    .table-verification th {
-      background-color: var(--noaa-light-blue);
-      text-align: left;
-      padding: 8px 10px;
-      font-weight: 600;
-      color: var(--noaa-dark-blue);
-    }
-
-    .table-verification td {
-      padding: 8px 10px;
-      border-bottom: 1px solid #e0e0e0;
-    }
-
-    .table-verification tr:hover td {
-      background-color: #f9f9f9;
-    }
-
     .notice-box {
       background-color: #fff3cd;
       border-left: 4px solid #fdb81b;
       padding: 12px 15px;
-      font-size: 0.9rem;
+      font-size: 0.88rem;
       margin-top: 15px;
       border-radius: 2px;
     }
@@ -299,12 +254,6 @@
       margin-top: 40px;
     }
 
-    footer a {
-      color: #aac9e8;
-      text-decoration: none;
-      margin: 0 8px;
-    }
-
     @media (max-width: 768px) {
       .container {
         grid-template-columns: 1fr;
@@ -315,10 +264,6 @@
         align-items: flex-start;
         gap: 6px;
       }
-      .main-nav a {
-        padding: 8px 10px;
-        font-size: 0.8rem;
-      }
     }
   </style>
 </head>
@@ -328,41 +273,36 @@
   <div class="agency-banner">
     <div>
       <span class="agency-title">VEYRA</span>
-      <span class="agency-subtitle">Forecast Reliability &amp; Bust Intelligence Research Environment</span>
+      <span class="agency-subtitle">Atmospheric Forecast Reliability &amp; Bust Intelligence</span>
     </div>
     <div style="display:flex; gap:12px; align-items:center;">
       <span class="status-badge">
-        <span class="status-dot"></span> API ONLINE v4.0
+        <span class="status-dot"></span> System Online &nbsp;|&nbsp; API v1.0.0
       </span>
-      <span class="status-badge" style="font-weight:400;">Auth: Token Active</span>
     </div>
   </div>
 
-  <!-- ============ Main Navigation ============ -->
+  <!-- ============ Single-Topic Navigation ============ -->
   <nav class="main-nav">
-    <a href="#" class="active">Forecast Evaluation</a>
-    <a href="https://veyra-v1-0.onrender.com/v1/metrics" target="_blank">Verification Dashboard</a>
-    <a href="#map">GIS Explorer</a>
-    <a href="https://veyra-v1-0.onrender.com/v1/models" target="_blank">Model Registry</a>
-    <a href="https://veyra-v1-0.onrender.com/docs" target="_blank">API Reference</a>
+    <span>Forecast Evaluation</span>
   </nav>
 
   <!-- ============ Breadcrumb ============ -->
   <div class="breadcrumb">
-    <a href="#">Home</a> &gt; <a href="#">Research Tools</a> &gt; <span>Forecast Bust Probability</span>
+    <span>Veyra Diagnostic Suite</span> &gt; <strong>Temperature Forecast Bust Intelligence</strong>
   </div>
 
   <!-- ============ Main Content ============ -->
   <main class="container">
 
-    <!-- Left Column: Input Panel -->
+    <!-- Left Column: Input Parameters -->
     <div class="card">
       <h2 class="card-header">Evaluation Parameters</h2>
       <form id="prediction-form" style="display: flex; flex-direction: column; gap: 16px;">
         <div>
           <label for="location">Target Location (City or Region)</label>
           <input type="text" id="location" value="Kolkata" required autocomplete="off" />
-          <small style="color:var(--noaa-muted); font-size:0.78rem;">Auto-geocoded on typing or map click</small>
+          <small style="color:var(--noaa-muted); font-size:0.78rem;">Auto-geocodes on typing or map click</small>
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
           <div>
@@ -376,13 +316,7 @@
         </div>
         <div>
           <label for="variable">Atmospheric Variable</label>
-          <select id="variable">
-            <option value="temperature_2m" selected>Temperature (2m)</option>
-            <option value="precipitation">Precipitation</option>
-            <option value="wind_speed_10m">Wind Speed (10m)</option>
-            <option value="relative_humidity_2m">Relative Humidity (2m)</option>
-            <option value="surface_pressure">Surface Pressure</option>
-          </select>
+          <input type="text" id="variable" value="Temperature (2m)" readonly style="background-color:#e9ecef; cursor:not-allowed;" />
         </div>
         <div>
           <label for="lead_hours">Lead Horizon</label>
@@ -396,14 +330,13 @@
         </div>
         <button type="submit" id="submit-btn" class="btn-primary">Evaluate Reliability</button>
       </form>
-      <div class="notice-box" style="margin-top: 20px;">
-        <strong>Operational Advisory:</strong> Bust probability is computed via multi-provider ensemble dispersion, gradient-boosted decision trees, and calibrated conformal intervals. &ge;60% indicates elevated bust risk.
+      <div class="notice-box">
+        <strong>Diagnostic Criteria:</strong> Bust probability measures the risk of numerical weather predictions failing beyond acceptable error thresholds. Probability &ge;60% denotes HIGH bust risk.
       </div>
     </div>
 
-    <!-- Right Column: Results + Map -->
+    <!-- Right Column: Live Results & Map -->
     <div>
-      <!-- Result Summary Card -->
       <div class="card">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
           <div>
@@ -411,7 +344,7 @@
               Analysis Target: <span id="res-location">Kolkata</span>
             </h2>
             <p style="font-size: 0.85rem; color: var(--noaa-muted);" id="res-meta">
-              Provider: open-meteo-primary &nbsp;|&nbsp; Model baseline: v2.1.0-prod
+              Provider: open-meteo-primary &nbsp;|&nbsp; Model Engine: v2.1.0-prod
             </p>
           </div>
           <span id="res-trust-badge" style="background-color: #e6f4e6; color: #2e8540; padding: 4px 12px; border-radius: 14px; font-size: 0.8rem; font-weight: 600;">
@@ -426,7 +359,7 @@
             <div class="metric-value mono" id="res-prob">--%</div>
           </div>
           <div class="metric-box">
-            <div class="metric-label">Calibrated Risk Tier</div>
+            <div class="metric-label">Risk Tier</div>
             <div class="metric-value risk-medium mono" id="res-risk">PENDING</div>
           </div>
           <div class="metric-box">
@@ -435,50 +368,18 @@
           </div>
         </div>
 
-        <!-- Dynamic Verification Table -->
-        <h3 style="font-size:1rem; font-weight:600; color:var(--noaa-dark-blue); margin-bottom:8px;">
-          Operational Verification Metrics (Live Ground-Truth Store)
-        </h3>
-        <table class="table-verification">
-          <thead>
-            <tr>
-              <th>Evaluation Parameter</th>
-              <th>Brier Score</th>
-              <th>ROC-AUC</th>
-              <th>Mean Abs Error</th>
-              <th>Calibrated Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td id="tbl-variable-lead">Temperature (2m), 48h</td>
-              <td id="tbl-brier">0.098</td>
-              <td id="tbl-auc">0.884</td>
-              <td id="tbl-mae">0.82 °C</td>
-              <td style="color: var(--risk-low); font-weight: 600;">Calibrated</td>
-            </tr>
-            <tr>
-              <td>Precipitation / Wind Dispersion</td>
-              <td>0.124</td>
-              <td>0.841</td>
-              <td>1.15 mm</td>
-              <td style="color: var(--risk-low); font-weight: 600;">Calibrated</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <!-- GIS Map -->
+        <!-- GIS Surveillance Map -->
         <h3 style="font-size:1rem; font-weight:600; color:var(--noaa-dark-blue); margin-top:20px; margin-bottom:8px;">
-          Provenance-Labeled GIS Map Layer
+          Spatial Reliability Assessment
         </h3>
         <div id="map" class="map-container"></div>
       </div>
 
-      <!-- Methodology Note -->
+      <!-- Methodology Box -->
       <div class="card" style="background-color:#f0f7ff; border-left: 4px solid var(--noaa-accent);">
-        <h3 class="card-header" style="border-bottom: none; margin-bottom:6px;">Scientific Methodology</h3>
+        <h3 class="card-header" style="border-bottom: none; margin-bottom:6px;">Scientific Architecture</h3>
         <p style="font-size:0.9rem; color:#333;">
-          Bust probability is computed dynamically using real-time atmospheric ensemble spread, temporal forecast variance, and calibrated ML isotonic ensembles. Conformal intervals are produced via split conformal prediction at the 90% confidence level.
+          Bust probability is computed dynamically using multi-provider NWP hourly forecast series, local atmospheric variance, and calibrated ML isotonic ensembles. Conformal intervals are evaluated at the 90% confidence level centered on live forecast temperatures.
         </p>
       </div>
     </div>
@@ -487,17 +388,14 @@
   <!-- ============ Footer ============ -->
   <footer>
     <div>
-      <strong>VEYRA Research Environment</strong> &nbsp;|&nbsp;
-      <a href="https://veyra-v1-0.onrender.com/health" target="_blank">Health Gateway</a>
-      <a href="https://veyra-v1-0.onrender.com/v1/models" target="_blank">Model Registry</a>
-      <a href="https://veyra-v1-0.onrender.com/metrics" target="_blank">Prometheus Telemetry</a>
+      <strong>VEYRA Research Environment</strong> &nbsp;|&nbsp; Experimental Atmospheric Reliability System
     </div>
     <div style="margin-top:8px; opacity:0.8;">
-      &copy; 2026 Veyra Scientific Computing. Real-time Numerical Weather Prediction &amp; Reliability System.
+      &copy; 2026 Veyra. All diagnostic outputs are generated live via numerical weather prediction pipelines.
     </div>
   </footer>
 
-  <!-- ============ Integrated API & Map Engine ============ -->
+  <!-- ============ Integrated Engine ============ -->
   <script>
     const API_BASE = "https://veyra-v1-0.onrender.com";
     const CLIENT_TOKEN = "veyra-public-client-token";
@@ -508,7 +406,6 @@
       return div.innerHTML;
     }
 
-    // 1. Initialize Map
     const map = L.map("map").setView([22.5726, 88.3639], 5);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
@@ -519,7 +416,6 @@
       .bindPopup("<b>Kolkata</b><br>Initial Target")
       .openPopup();
 
-    // 2. Map Click Listener
     map.on("click", (e) => {
       const lat = parseFloat(e.latlng.lat.toFixed(4));
       const lon = parseFloat(e.latlng.lng.toFixed(4));
@@ -530,7 +426,6 @@
       marker.setPopupContent(`<b>Target</b><br>${lat}, ${lon}`).openPopup();
     });
 
-    // 3. Dynamic Forward Geocoding
     async function resolveLocationCoordinates(query) {
       if (!query || query.trim().length === 0) return null;
       try {
@@ -571,7 +466,6 @@
       }, 400);
     });
 
-    // 4. Form Submit to Real Cloud API
     async function evaluateForecast() {
       const btn = document.getElementById("submit-btn");
       btn.disabled = true;
@@ -580,7 +474,6 @@
       let loc = document.getElementById("location").value.trim();
       let lat = parseFloat(document.getElementById("latitude").value);
       let lon = parseFloat(document.getElementById("longitude").value);
-      const variable = document.getElementById("variable").value;
       const leadHours = parseInt(document.getElementById("lead_hours").value, 10);
 
       if (isNaN(lat) || isNaN(lon) || !loc.startsWith("Coordinates")) {
@@ -606,7 +499,7 @@
         location: loc,
         latitude: lat,
         longitude: lon,
-        variable: variable,
+        variable: "temperature_2m",
         lead_hours: leadHours
       };
 
@@ -625,10 +518,9 @@
           throw new Error(data.detail || "Forecast evaluation failed");
         }
 
-        // Render Summary
         document.getElementById("res-location").innerText = data.location;
         document.getElementById("res-prob").innerText = `${(data.bust_probability * 100).toFixed(1)}%`;
-        document.getElementById("res-meta").innerText = `Provider: ${data.provider_provenance} | Model: ${data.model_version}`;
+        document.getElementById("res-meta").innerText = `Provider: ${data.provider_provenance} | Model Engine: ${data.model_version}`;
 
         const riskEl = document.getElementById("res-risk");
         riskEl.innerText = data.risk_level;
@@ -646,11 +538,9 @@
         trustBadge.style.color = data.trust_state === "SUPPORTED" ? "#2e8540" : "#d97706";
 
         document.getElementById("res-conformal").innerText = `[${data.conformal_lower}°C , ${data.conformal_upper}°C]`;
-        document.getElementById("tbl-variable-lead").innerText = `${variable.replace('_', ' ')}, ${leadHours}h`;
 
-        // Update Map Marker
         marker.setLatLng([lat, lon]);
-        marker.setPopupContent(`<b>${escapeHtml(data.location)}</b><br>Lead: +${leadHours}h<br>Bust Prob: ${(data.bust_probability * 100).toFixed(1)}%<br>Tier: ${data.risk_level}`).openPopup();
+        marker.setPopupContent(`<b>${escapeHtml(data.location)}</b><br>Lead: +${leadHours}h<br>Bust Risk: ${(data.bust_probability * 100).toFixed(1)}%<br>Tier: ${data.risk_level}`).openPopup();
         map.flyTo([lat, lon], 6, { duration: 1.0 });
 
       } catch (err) {
@@ -666,7 +556,6 @@
       evaluateForecast();
     });
 
-    // Initial evaluation on load
     evaluateForecast();
   </script>
 </body>
