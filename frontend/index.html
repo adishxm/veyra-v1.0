@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Veyra | Forecast Reliability & Bust Intelligence</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased">
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="h-8 w-8 rounded-lg bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 font-bold mono">V</div>
+        <span class="text-lg font-bold tracking-tight">VEYRA <span class="text-xs font-normal text-indigo-400 mono">v4.0-prod</span></span>
+      </div>
+      <div id="service-status" class="flex items-center gap-2 text-xs mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full">
+        <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        API ONLINE
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <!-- Prediction Form Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      
+      <!-- Input Panel -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-5">
+        <h2 class="text-base font-semibold text-slate-200">Ensemble Forecast Evaluation</h2>
+        <form id="prediction-form" class="space-y-4 text-sm">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">Target Location</label>
+            <input type="text" id="location" value="Kolkata" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500" required />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Latitude</label>
+              <input type="number" step="any" id="latitude" value="22.5726" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500" required />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Longitude</label>
+              <input type="number" step="any" id="longitude" value="88.3639" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500" required />
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Variable</label>
+              <select id="variable" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500">
+                <option value="temperature_2m">Temperature (2m)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Lead Horizon</label>
+              <select id="lead_hours" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500">
+                <option value="24">24 Hours</option>
+                <option value="48" selected>48 Hours</option>
+                <option value="72">72 Hours</option>
+                <option value="120">120 Hours</option>
+              </select>
+            </div>
+          </div>
+          <button type="submit" id="submit-btn" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2.5 rounded-lg transition text-sm flex items-center justify-center gap-2">
+            Evaluate Reliability
+          </button>
+        </form>
+      </div>
+
+      <!-- Live Output Panel -->
+      <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-6 flex flex-col justify-between" id="result-container">
+        <div>
+          <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+            <div>
+              <span class="text-xs text-slate-400 uppercase tracking-wider">Analysis Target</span>
+              <h3 class="text-xl font-bold text-slate-100" id="res-location">Kolkata</h3>
+            </div>
+            <span id="res-trust-badge" class="px-3 py-1 rounded-full text-xs mono font-semibold bg-slate-800 text-slate-400">WAITING</span>
+          </div>
+
+          <!-- Risk Tier & Conformal Interval -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+            <div class="bg-slate-950/60 border border-slate-800/80 p-4 rounded-lg">
+              <span class="text-xs text-slate-400 block mb-1">Bust Probability</span>
+              <span class="text-2xl font-bold mono text-slate-200" id="res-prob">--</span>
+            </div>
+            <div class="bg-slate-950/60 border border-slate-800/80 p-4 rounded-lg">
+              <span class="text-xs text-slate-400 block mb-1">Calibrated Risk Tier</span>
+              <span class="text-2xl font-bold mono" id="res-risk">--</span>
+            </div>
+            <div class="bg-slate-950/60 border border-slate-800/80 p-4 rounded-lg">
+              <span class="text-xs text-slate-400 block mb-1">Conformal Interval (90%)</span>
+              <span class="text-lg font-bold mono text-indigo-400" id="res-conformal">--</span>
+            </div>
+          </div>
+
+          <!-- Metadata Grid -->
+          <div class="mt-6 space-y-3">
+            <div class="flex items-center justify-between text-xs py-2 border-b border-slate-800/50">
+              <span class="text-slate-400">Novelty Distance (OOD):</span>
+              <span class="mono text-slate-200" id="res-novelty">--</span>
+            </div>
+            <div class="flex items-center justify-between text-xs py-2 border-b border-slate-800/50">
+              <span class="text-slate-400">Active Model Version:</span>
+              <span class="mono text-slate-200" id="res-model">--</span>
+            </div>
+            <div class="flex items-center justify-between text-xs py-2">
+              <span class="text-slate-400">Physical Evidence Flags:</span>
+              <span class="mono text-indigo-300" id="res-evidence">--</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="text-[11px] mono text-slate-500 pt-4 border-t border-slate-800 flex justify-between">
+          <span id="res-schema">Schema: personal-veyra-features-v2</span>
+          <span id="res-data">Data: live-nwp</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Telemetry & Model Registry Summary -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+        <h3 class="text-sm font-semibold text-slate-200 mb-4">Active Model Registry Status</h3>
+        <div id="models-list" class="space-y-3 text-xs mono">
+          <div class="text-slate-500">Querying registry...</div>
+        </div>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+        <h3 class="text-sm font-semibold text-slate-200 mb-4">Empirical Validation Metrics</h3>
+        <div id="metrics-summary" class="space-y-3 text-xs mono">
+          <div class="text-slate-500">Loading metrics...</div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
