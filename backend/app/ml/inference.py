@@ -42,10 +42,7 @@ class RealMLInferenceEngine:
         if any(math.isnan(v) or math.isinf(v) for v in [lat, lon, lead_hours, target_temp, spread, temp_var]):
             raise ValueError("Non-finite numeric values encountered in inference features")
 
-        # 1. Geographic distance/novelty metric
         novelty = round(abs((lat / 45.0) ** 2 + (lon / 90.0) * 0.1 - 0.5), 3)
-
-        # 2. Dynamic ML feature vector
         feat_vector = np.array([[spread, temp_var, 0.0, 0.0, lead_hours, novelty]])
 
         if model is not None:
@@ -55,9 +52,9 @@ class RealMLInferenceEngine:
 
         bust_prob = float(np.clip(raw_prob + (novelty * 0.02), 0.05, 0.95))
 
-        # 3. Dynamic conformal prediction interval centered on the live target temperature
+        # Dynamically sized conformal prediction interval centered on the live target forecast
         q90 = float(meta.get("conformal_quantile_90", 0.7228)) if meta else 0.7228
-        margin = round(max(1.1, q90 * spread * (1.0 + (lead_hours / 240.0) * 0.5)), 2)
+        margin = round(max(1.8, q90 * spread * 1.6 * (1.0 + (lead_hours / 240.0) * 0.5)), 2)
 
         conformal_lower = round(target_temp - margin, 2)
         conformal_upper = round(target_temp + margin, 2)

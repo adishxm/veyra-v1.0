@@ -32,12 +32,12 @@ app = FastAPI(
     description="Production Numerical Weather Prediction Reliability & Bust Intelligence System"
 )
 
-# Intercept Validation and Type Conversion Errors to guarantee 422
+# 1. Safe JSON-Serializable Validation Exception Handler (Fixes Type Regression 500 -> 422)
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content={"detail": "Input validation error", "errors": exc.errors() if hasattr(exc, "errors") else str(exc)}
+        content={"detail": "Input validation error", "errors": [str(err.get("msg", err)) for err in exc.errors()]}
     )
 
 @app.exception_handler(ValueError)
@@ -54,7 +54,7 @@ async def recursion_exception_handler(request: Request, exc: RecursionError):
         content={"detail": "Payload structure rejected: recursion depth limit exceeded"}
     )
 
-# Security Headers & 2MB Request Size Limiter Middleware
+# 2. Security Headers & Request Body Guard Middleware
 @app.middleware("http")
 async def security_and_payload_guard_middleware(request: Request, call_next):
     content_length = request.headers.get("content-length")
@@ -67,11 +67,6 @@ async def security_and_payload_guard_middleware(request: Request, call_next):
 
     try:
         response = await call_next(request)
-    except (ValueError, RequestValidationError):
-        return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            content={"detail": "Input validation error"}
-        )
     except RecursionError:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -116,22 +111,22 @@ class PredictRequest(BaseModel):
 
     @field_validator("latitude", "longitude", mode="before")
     @classmethod
-    def check_finite_coords(cls, v):
-        if isinstance(v, bool):
-            raise ValueError("Coordinates cannot be boolean")
+    def validate_finite_coords(cls, v):
+        if isinstance(v, bool) or v is None:
+            raise ValueError("Coordinates cannot be boolean or null")
         try:
             val = float(v)
             if math.isnan(val) or math.isinf(val):
                 raise ValueError("Coordinates must be finite numeric values")
             return val
         except (TypeError, ValueError):
-            raise ValueError("Invalid numeric coordinates")
+            raise ValueError("Coordinates must be valid numbers")
 
     @field_validator("lead_hours", mode="before")
     @classmethod
-    def check_finite_lead(cls, v):
-        if isinstance(v, bool):
-            raise ValueError("Boolean values are not allowed for lead_hours")
+    def validate_finite_lead(cls, v):
+        if isinstance(v, bool) or v is None:
+            raise ValueError("lead_hours cannot be boolean or null")
         try:
             val = float(v)
             if math.isnan(val) or math.isinf(val) or not val.is_integer():
@@ -146,34 +141,6 @@ class BatchItemRequest(BaseModel):
     longitude: Optional[float] = None
     variable: Optional[SupportedWeatherVariable] = SupportedWeatherVariable.temperature_2m
     lead_hours: Optional[int] = 48
-
-    @field_validator("latitude", "longitude", mode="before")
-    @classmethod
-    def check_finite_batch_coords(cls, v):
-        if v is None:
-            return None
-        try:
-            val = float(v)
-            if math.isnan(val) or math.isinf(val):
-                return None
-            return val
-        except (TypeError, ValueError):
-            return None
-
-    @field_validator("lead_hours", mode="before")
-    @classmethod
-    def check_finite_batch_lead(cls, v):
-        if v is None:
-            return 48
-        try:
-            if isinstance(v, bool):
-                return 48
-            val = float(v)
-            if math.isnan(val) or math.isinf(val):
-                return 48
-            return int(val)
-        except (TypeError, ValueError):
-            return 48
 
 class BatchPredictRequest(BaseModel):
     items: List[BatchItemRequest]
