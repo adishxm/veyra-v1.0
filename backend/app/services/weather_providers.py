@@ -96,33 +96,37 @@ class MultiProviderWeatherIngestion:
 
     @classmethod
     def calculate_climatological_physics_baseline(cls, lat: float, lon: float, lead_hours: int = 48) -> Dict[str, Any]:
-        """Realistic planetary thermal-radiation model across polar ice sheets and desert belts."""
+        """Planetary thermal-radiation model covering seasonal polar insolation and subtropical deserts."""
         abs_lat = abs(lat)
         now = datetime.now(timezone.utc)
         day_of_year = now.timetuple().tm_yday
         is_n_summer = 80 <= day_of_year <= 264
 
-        # 1. Base insolation curve
         if abs_lat <= 23.5:
-            # Tropical belt
+            # Tropical zone
             base_temp = 28.0 - (abs_lat * 0.15)
         elif abs_lat <= 38.0:
             # Subtropical desert & Mediterranean band
             base_temp = 36.0 if (is_n_summer and lat > 0) else 18.0 if (not is_n_summer and lat > 0) else 24.0
         elif abs_lat <= 60.0:
-            # Mid-latitude temperate zone
+            # Mid-latitude temperate belt
             base_temp = 22.0 - ((abs_lat - 38.0) * 0.7)
-        elif abs_lat <= 75.0:
-            # Sub-polar & Arctic / Sub-Antarctic
-            base_temp = -2.0 - ((abs_lat - 60.0) * 1.4)
+        elif abs_lat < 66.0:
+            # Sub-polar maritime/continental transitions
+            base_temp = 14.0 - ((abs_lat - 60.0) * 1.2) if is_n_summer else -2.0 - ((abs_lat - 60.0) * 1.4)
         else:
-            # Polar Ice Sheets (Antarctica / Arctic Cap)
+            # Polar Regions (Arctic & Antarctic)
             if lat < 0:
-                # Antarctica polar plateau in winter (-45°C to -65°C)
+                # Antarctic Plateau (-35°C to -65°C)
                 base_temp = -48.0 - ((abs_lat - 75.0) * 0.8)
             else:
-                # Arctic Ocean ice sheet
-                base_temp = -15.0 - ((abs_lat - 75.0) * 0.5)
+                # Arctic Belt (Seasonally Calibrated)
+                if is_n_summer:
+                    # Arctic Summer: +2°C to +14°C
+                    base_temp = 10.0 - ((abs_lat - 66.0) * 0.45)
+                else:
+                    # Arctic Winter: -15°C to -35°C
+                    base_temp = -18.0 - ((abs_lat - 66.0) * 0.75)
 
         diurnal = 3.5 * math.sin((lead_hours % 24) * (math.pi / 12.0) - 2.0)
         final_temp = round(base_temp + diurnal, 2)

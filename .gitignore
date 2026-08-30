@@ -25,3 +25,7 @@ models/*
 node_modules/
 dist/
 build/
+
+*.db
+*.sqlite
+*.sqlite3
