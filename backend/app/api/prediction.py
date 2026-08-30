@@ -8,6 +8,7 @@ from backend.app.db.models import PredictionLog
 from backend.app.db.session import get_db
 from backend.app.features.basic import FEATURE_SCHEMA_VERSION, build_features
 from backend.app.model.registry import model_registry
+from backend.app.safety.conformal import conformal_engine
 from backend.app.safety.evaluator import evaluate
 from backend.app.weather.schemas import ForecastRequest
 from backend.app.weather.service import weather_service
@@ -28,6 +29,15 @@ class PredictionResponse(BaseModel):
     )
     abstain: bool = Field(
         ..., description="Whether inference was safely withheld due to corrupt/OOD inputs"
+    )
+    novelty_score: float = Field(
+        default=0.0, description="Mahalanobis novelty distance score"
+    )
+    conformal_lower: float | None = Field(
+        default=None, description="Conformal 90% lower bound"
+    )
+    conformal_upper: float | None = Field(
+        default=None, description="Conformal 90% upper bound"
     )
     reason_codes: list[str] = Field(
         default_factory=list, description="Diagnostic audit codes for safety decisions"
@@ -58,7 +68,7 @@ async def predict(
             status_code=422, detail="latitude and longitude are required for V0.1"
         )
 
-    # 1. Multi-provider ensemble fetch with failover
+    # 1. Fetch ensemble forecast
     try:
         forecast = await weather_service.get_forecast(
             location=request.location,
@@ -73,17 +83,21 @@ async def predict(
             detail=f"Failed to fetch ensemble forecast across all providers: {str(exc)}",
         )
 
-    # 2. Feature Extraction
+    # 2. Extract features
     features = build_features(forecast)
 
-    # 3. Model Registry Dynamic Inference
-    active_scorer, metadata = model_registry.get_active_model()
+    # 3. Model inference
+    active_scorer, _ = model_registry.get_active_model()
     result = active_scorer.predict_probability(features)
 
-    # 4. Safety Guardrails & Trust Gating
+    # 4. Safety & Conformal Evaluation
     safety = evaluate(feature_values=features, probability=result.probability)
+    interval = conformal_engine.compute_conformal_interval(
+        forecast_mean=features.get("forecast_mean", 0.0),
+        spread=features.get("forecast_spread", 1.0),
+    )
 
-    # 5. SQLite Audit Persistence
+    # 5. Persist audit log
     log_entry = PredictionLog(
         location=request.location,
         latitude=request.latitude,
@@ -108,6 +122,9 @@ async def predict(
         risk_level=None if safety.abstain else result.risk_level,
         trust_state=safety.trust_state,
         abstain=safety.abstain,
+        novelty_score=safety.novelty_score,
+        conformal_lower=None if safety.abstain else interval.lower_bound,
+        conformal_upper=None if safety.abstain else interval.upper_bound,
         reason_codes=safety.reason_codes,
         evidence=[] if safety.abstain else result.evidence,
         model_version=None if safety.abstain else result.model_version,
@@ -118,7 +135,6 @@ async def predict(
 
 @router.get("/models", tags=["model-registry"])
 def list_registered_models():
-    """List all registered models, current active version, and validation metrics."""
     return {
         "active_version": model_registry._active_version,
         "models": list(model_registry._metadata.values()),

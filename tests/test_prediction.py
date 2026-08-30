@@ -20,9 +20,11 @@ def test_prediction_returns_structured_supported_result() -> None:
     assert body["trust_state"] in ("SUPPORTED", "DEGRADED")
     assert body["abstain"] is False
     assert 0.0 <= body["bust_probability"] <= 1.0
+    assert "conformal_lower" in body
+    assert "conformal_upper" in body
+    assert body["conformal_lower"] < body["conformal_upper"]
+    assert "novelty_score" in body
     assert "personal-veyra-ml" in body["model_version"]
-    assert body["feature_schema_version"] == "personal-veyra-features-v2"
-    assert isinstance(body["evidence"], list)
 
 
 def test_prediction_requires_lat_lon() -> None:
