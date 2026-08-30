@@ -35,3 +35,14 @@ def test_prediction_requires_lat_lon() -> None:
         },
     )
     assert response.status_code == 422
+
+
+def test_prediction_logs_endpoint() -> None:
+    # Query logs endpoint after prediction has run
+    response = client.get("/v1/logs?limit=5")
+    assert response.status_code == 200
+    logs = response.json()
+    assert isinstance(logs, list)
+    assert len(logs) >= 1
+    assert "location" in logs[0]
+    assert "bust_probability" in logs[0]

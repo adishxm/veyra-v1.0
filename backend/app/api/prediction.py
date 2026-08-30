@@ -1,6 +1,9 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
+from backend.app.db.models import PredictionLog
+from backend.app.db.session import get_db
 from backend.app.features.basic import FEATURE_SCHEMA_VERSION, build_features
 from backend.app.model.baseline import BaselineReliabilityScorer
 from backend.app.safety.evaluator import evaluate
@@ -37,7 +40,9 @@ class PredictionResponse(BaseModel):
 
 
 @router.post("/predict", response_model=PredictionResponse)
-async def predict(request: ForecastRequest) -> PredictionResponse:
+async def predict(
+    request: ForecastRequest, db: Session = Depends(get_db)
+) -> PredictionResponse:
     if request.latitude is None or request.longitude is None:
         raise HTTPException(status_code=422, detail="latitude and longitude are required for V0.1")
 
@@ -65,7 +70,26 @@ async def predict(request: ForecastRequest) -> PredictionResponse:
     # 4. Safety guardrails and trust evaluation
     safety = evaluate(feature_values=features, probability=result.probability)
 
-    # 5. Format response
+    # 5. Persist prediction audit log to database
+    log_entry = PredictionLog(
+        location=request.location,
+        latitude=request.latitude,
+        longitude=request.longitude,
+        variable=request.variable,
+        lead_hours=request.lead_hours,
+        forecast_mean=features.get("forecast_mean"),
+        forecast_spread=features.get("forecast_spread"),
+        member_count=int(features.get("member_count", 0)),
+        bust_probability=None if safety.abstain else result.probability,
+        risk_level=None if safety.abstain else result.risk_level,
+        trust_state=safety.trust_state,
+        abstain=safety.abstain,
+        model_version=None if safety.abstain else result.model_version,
+    )
+    db.add(log_entry)
+    db.commit()
+
+    # 6. Return response
     return PredictionResponse(
         location=request.location,
         bust_probability=None if safety.abstain else result.probability,
@@ -78,3 +102,15 @@ async def predict(request: ForecastRequest) -> PredictionResponse:
         feature_schema_version=None if safety.abstain else FEATURE_SCHEMA_VERSION,
         data_version=None if safety.abstain else forecast.data_version,
     )
+
+
+@router.get("/logs", tags=["prediction"])
+def get_prediction_logs(limit: int = 10, db: Session = Depends(get_db)):
+    """Retrieve the most recent prediction audit records."""
+    logs = (
+        db.query(PredictionLog)
+        .order_by(PredictionLog.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return logs
