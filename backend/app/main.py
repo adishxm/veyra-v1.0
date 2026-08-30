@@ -1,4 +1,4 @@
-import time
+﻿import time
 import uuid
 import os
 import json
@@ -6,7 +6,7 @@ import math
 import html
 import sqlite3
 from enum import Enum
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, Depends, Request, Query, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,24 +26,26 @@ from backend.app.services.retraining import (
     DB_PATH,
 )
 
+HTTP_422 = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
+
 app = FastAPI(
     title="Veyra Atmospheric Reliability API",
     version="1.0.0",
     description="Production Numerical Weather Prediction Reliability & Bust Intelligence System"
 )
 
-# 1. Validation & Recursion Exception Handlers (Guarantees clean 422/400 without 500 crashes)
+# 1. Validation & Recursion Exception Handlers
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=HTTP_422,
         content={"detail": "Input validation error", "errors": [str(err.get("msg", err)) for err in exc.errors()]}
     )
 
 @app.exception_handler(ValueError)
 async def value_error_exception_handler(request: Request, exc: ValueError):
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=HTTP_422,
         content={"detail": f"Numeric or format validation error: {str(exc)}"}
     )
 
@@ -61,7 +63,10 @@ async def security_and_payload_guard_middleware(request: Request, call_next):
     if content_length:
         try:
             if int(content_length) > 2 * 1024 * 1024:
-                return PlainTextResponse("Payload Too Large: maximum allowed body is 2MB", status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
+                return PlainTextResponse(
+                    "Payload Too Large: maximum allowed body is 2MB",
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+                )
         except ValueError:
             pass
 
@@ -77,7 +82,10 @@ async def security_and_payload_guard_middleware(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Content-Security-Policy"] = "default-src 'self' https:; img-src 'self' data: https:; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:;"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self' https:; img-src 'self' data: https:; "
+        "script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:;"
+    )
     return response
 
 app.add_middleware(
@@ -142,14 +150,27 @@ class BatchItemRequest(BaseModel):
     variable: Optional[SupportedWeatherVariable] = SupportedWeatherVariable.temperature_2m
     lead_hours: Optional[int] = 48
 
-    @field_validator("latitude", "longitude", mode="before")
+    @field_validator("latitude", mode="before")
     @classmethod
-    def validate_finite_batch_coords(cls, v):
+    def validate_finite_batch_lat(cls, v):
         if v is None:
             return None
         try:
             val = float(v)
-            if math.isnan(val) or math.isinf(val):
+            if math.isnan(val) or math.isinf(val) or not (-90.0 <= val <= 90.0):
+                return None
+            return val
+        except (TypeError, ValueError):
+            return None
+
+    @field_validator("longitude", mode="before")
+    @classmethod
+    def validate_finite_batch_lon(cls, v):
+        if v is None:
+            return None
+        try:
+            val = float(v)
+            if math.isnan(val) or math.isinf(val) or not (-180.0 <= val <= 180.0):
                 return None
             return val
         except (TypeError, ValueError):
@@ -164,7 +185,7 @@ class BatchItemRequest(BaseModel):
             if isinstance(v, bool):
                 return 48
             val = float(v)
-            if math.isnan(val) or math.isinf(val):
+            if math.isnan(val) or math.isinf(val) or not (1 <= val <= 240):
                 return 48
             return int(val)
         except (TypeError, ValueError):
@@ -186,16 +207,13 @@ class UserPreferencesPayload(BaseModel):
     saved_locations: List[dict]
     alert_threshold: float = 0.45
 
-
 @app.get("/")
 def root():
     return {"status": "online", "service": "veyra-v1-personal", "version": "1.0.0", "docs": "/docs"}
 
-
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "veyra-v1-personal", "version": "1.0.0"}
-
 
 @app.get("/metrics", response_class=PlainTextResponse)
 def prometheus_metrics():
@@ -215,7 +233,6 @@ def prometheus_metrics():
         f"veyra_risk_tier_total{{tier=\"HIGH\"}} {METRICS['risk_tiers']['HIGH']}\n"
         f"veyra_risk_tier_total{{tier=\"CRITICAL\"}} {METRICS['risk_tiers']['CRITICAL']}\n"
     )
-
 
 @app.get("/v1/models")
 def list_models():
@@ -242,7 +259,6 @@ def list_models():
             }
         ]
     }
-
 
 @app.post("/v1/predict")
 async def predict_single(req: PredictRequest, request: Request, user: dict = Depends(require_auth_user)):
@@ -291,7 +307,6 @@ async def predict_single(req: PredictRequest, request: Request, user: dict = Dep
     log_prediction(response)
 
     return response
-
 
 @app.post("/v1/predict/batch")
 async def predict_batch(req: BatchPredictRequest, request: Request, user: dict = Depends(require_auth_user)):
@@ -367,7 +382,6 @@ async def predict_batch(req: BatchPredictRequest, request: Request, user: dict =
         "results": results
     }
 
-
 @app.post("/v1/jobs/predict")
 async def create_async_predict_job(req: BatchPredictRequest, request: Request, user: dict = Depends(require_auth_user)):
     job_id = f"job-{uuid.uuid4().hex[:8]}"
@@ -379,7 +393,6 @@ async def create_async_predict_job(req: BatchPredictRequest, request: Request, u
 
     return {"job_id": job_id, "status": "PENDING", "total_items": len(req.items)}
 
-
 @app.get("/v1/jobs/{job_id}")
 def get_async_job(job_id: str, user: dict = Depends(require_auth_user)):
     job = get_persisted_job(job_id)
@@ -387,13 +400,16 @@ def get_async_job(job_id: str, user: dict = Depends(require_auth_user)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Job {job_id} not found")
     return job
 
-
 # 3. Role-Scoped Log Access (Admin Only)
 @app.get("/v1/logs")
 def get_prediction_logs(limit: int = Query(default=100, ge=1, le=1000), user: dict = Depends(require_admin_user)):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute("SELECT id, timestamp, location, latitude, longitude, bust_prob, risk_level, trust_state, model_version FROM predictions ORDER BY id DESC LIMIT ?", (limit,))
+    cur.execute(
+        "SELECT id, timestamp, location, latitude, longitude, bust_prob, risk_level, trust_state, model_version "
+        "FROM predictions ORDER BY id DESC LIMIT ?",
+        (limit,)
+    )
     rows = cur.fetchall()
     conn.close()
 
@@ -412,7 +428,6 @@ def get_prediction_logs(limit: int = Query(default=100, ge=1, le=1000), user: di
         for r in rows
     ]
 
-
 # 4. Scoped Ground Truth Writes (Admin Only)
 @app.post("/v1/actuals")
 def ingest_ground_truth(payload: ActualObservationPayload, user: dict = Depends(require_admin_user)):
@@ -426,7 +441,7 @@ def ingest_ground_truth(payload: ActualObservationPayload, user: dict = Depends(
     cur.execute("""
     INSERT INTO actuals (timestamp, location, observed_temperature, predicted_temperature, bust_occurred)
     VALUES (?, ?, ?, ?, ?)
-    """, (datetime.utcnow().isoformat(), loc, obs_temp, pred_temp, bust_occ))
+    """, (datetime.now(timezone.utc).isoformat(), loc, obs_temp, pred_temp, bust_occ))
     conn.commit()
     conn.close()
 
@@ -435,7 +450,6 @@ def ingest_ground_truth(payload: ActualObservationPayload, user: dict = Depends(
         "prediction_id": payload.prediction_id,
         "message": "Ground truth observation verified and ingested successfully"
     }
-
 
 @app.get("/v1/metrics")
 def get_validation_metrics(user: dict = Depends(require_auth_user)):
@@ -453,17 +467,14 @@ def get_validation_metrics(user: dict = Depends(require_auth_user)):
         "roc_auc": 0.884
     }
 
-
 @app.get("/v1/user/preferences")
 def get_preferences(user: dict = Depends(require_auth_user)):
     return get_user_prefs(user["user_id"])
-
 
 @app.post("/v1/user/preferences")
 def update_preferences(payload: UserPreferencesPayload, user: dict = Depends(require_auth_user)):
     save_user_prefs(user["user_id"], payload.saved_locations, payload.alert_threshold)
     return {"status": "success", "message": "Preferences saved successfully"}
-
 
 # 5. Scoped Retrain Trigger (Admin Only)
 @app.post("/v1/admin/retrain")

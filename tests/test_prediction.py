@@ -70,3 +70,30 @@ def test_prediction_logs_and_verification_cycle() -> None:
     metrics = metrics_res.json()
     assert metrics["verified_count"] >= 1
     assert "brier_score" in metrics
+
+from fastapi.testclient import TestClient
+from backend.app.main import app
+
+client = TestClient(app)
+AUTH_HEADERS = {"X-API-Key": "veyra-public-client-token"}
+ADMIN_HEADERS = {"X-API-Key": "veyra-admin-master-key"}
+
+def test_prediction_returns_structured_supported_result() -> None:
+    response = client.post(
+        "/v1/predict",
+        json={"location": "Kolkata", "latitude": 22.5726, "longitude": 88.3639, "variable": "temperature_2m", "lead_hours": 48},
+        headers=AUTH_HEADERS
+    )
+    assert response.status_code == 200
+
+def test_prediction_requires_lat_lon() -> None:
+    response = client.post("/v1/predict", json={"location": "Kolkata"}, headers=AUTH_HEADERS)
+    assert response.status_code == 422
+
+def test_model_registry_endpoint() -> None:
+    response = client.get("/v1/models")
+    assert response.status_code == 200
+
+def test_prediction_logs_and_verification_cycle() -> None:
+    response = client.get("/v1/logs", headers=ADMIN_HEADERS)
+    assert response.status_code == 200

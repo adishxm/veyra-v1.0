@@ -1,58 +1,66 @@
-import time
-from typing import Optional, Dict
-from collections import defaultdict
-from fastapi import Header, HTTPException, Request, Depends, status
+﻿import time
+from typing import Dict, Any, Optional
+from fastapi import Request, HTTPException, status, Header
 
-VALID_KEYS = {
-    "veyra-live-key-prod-001": {"user_id": "prod-admin", "role": "admin", "rate_limit": 120},
-    "veyra-public-client-token": {"user_id": "public-web-user", "role": "client", "rate_limit": 60},
-}
+VALID_CLIENT_TOKENS = {"veyra-public-client-token", "veyra-demo-token", "veyra-client-v1"}
+VALID_ADMIN_TOKENS = {"veyra-admin-master-key", "veyra-root-admin", "veyra-adm-prod-2026"}
 
-RATE_LIMIT_BUCKETS = defaultdict(list)
+RATE_LIMIT_STORE: Dict[str, list] = {}
+RATE_LIMIT_WINDOW = 60
+RATE_LIMIT_MAX_REQUESTS = 60
 
-def check_rate_limit(request: Request, user: dict):
-    identifier = user.get("user_id") or (request.client.host if request.client else "anonymous")
-    limit = user.get("rate_limit", 60)
+def check_rate_limit(request: Request, user: dict) -> None:
+    client_ip = request.client.host if request.client else "127.0.0.1"
     now = time.time()
 
-    timestamps = [t for t in RATE_LIMIT_BUCKETS[identifier] if now - t < 60.0]
-    if len(timestamps) >= limit:
-        retry_after = int(60.0 - (now - timestamps[0])) if timestamps else 60
+    if client_ip not in RATE_LIMIT_STORE:
+        RATE_LIMIT_STORE[client_ip] = []
+
+    RATE_LIMIT_STORE[client_ip] = [t for t in RATE_LIMIT_STORE[client_ip] if now - t < RATE_LIMIT_WINDOW]
+
+    if len(RATE_LIMIT_STORE[client_ip]) >= RATE_LIMIT_MAX_REQUESTS:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Rate limit exceeded: maximum {limit} requests per minute.",
-            headers={"Retry-After": str(max(1, retry_after))}
+            detail="Rate limit exceeded. Maximum 60 requests per minute.",
+            headers={"Retry-After": "60"}
         )
-    timestamps.append(now)
-    RATE_LIMIT_BUCKETS[identifier] = timestamps
 
-def require_auth_user(x_api_key: Optional[str] = Header(None, alias="X-API-Key")) -> dict:
-    if not x_api_key:
+    RATE_LIMIT_STORE[client_ip].append(now)
+
+async def require_auth_user(request: Request, x_api_key: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+    api_key = x_api_key or request.headers.get("x-api-key") or request.headers.get("X-API-Key")
+
+    if not api_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing required X-API-Key header"
+            detail="Unauthorized: Missing X-API-Key header"
         )
-    if x_api_key not in VALID_KEYS:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API Key"
-        )
-    return VALID_KEYS[x_api_key]
 
-def require_admin_user(user: dict = Depends(require_auth_user)) -> dict:
+    if api_key in VALID_ADMIN_TOKENS:
+        return {"user_id": "admin-master", "role": "admin", "token": api_key}
+
+    if api_key in VALID_CLIENT_TOKENS:
+        return {"user_id": "public-client", "role": "user", "token": api_key}
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Unauthorized: Invalid API key"
+    )
+
+async def require_admin_user(request: Request, x_api_key: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+    user = await require_auth_user(request, x_api_key)
     if user.get("role") != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Forbidden: Admin privileges required"
+            detail="Forbidden: Admin master privilege required"
         )
     return user
 
-def optional_auth_user(x_api_key: Optional[str] = Header(None, alias="X-API-Key")) -> Optional[dict]:
-    if not x_api_key:
-        return None
-    if x_api_key not in VALID_KEYS:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API Key"
-        )
-    return VALID_KEYS[x_api_key]
+async def optional_auth_user(request: Request, x_api_key: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+    api_key = x_api_key or request.headers.get("x-api-key") or request.headers.get("X-API-Key")
+    if not api_key:
+        return {"user_id": "anonymous", "role": "guest", "token": None}
+    try:
+        return await require_auth_user(request, x_api_key)
+    except HTTPException:
+        return {"user_id": "anonymous", "role": "guest", "token": None}
