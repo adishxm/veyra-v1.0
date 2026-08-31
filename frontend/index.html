@@ -1363,7 +1363,11 @@ Awaiting analysis audit trigger...
   <script>
     lucide.createIcons();
 
-    const API_BASE = "https://veyra-v1-0.onrender.com";
+    // Auto-detect whether running locally or on cloud
+    const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && window.location.port === '8000'
+      ? window.location.origin
+      : "https://veyra-v1-0.onrender.com";
+
     let activeToken = "veyra-public-client-token";
 
     // 1. UTC Clock
@@ -1561,11 +1565,24 @@ Awaiting analysis audit trigger...
       setTimeout(() => { b.style.display = 'none'; }, 6000);
     }
 
-    // 7. Sentinel Audit Execution
+    // 7. Liveness Check
+    async function checkLiveness() {
+      try {
+        const res = await fetch(`${API_BASE}/health`);
+        if (res.ok) {
+          const h = await res.json();
+          document.getElementById('gatewayStatus').innerText = `GATEWAY LIVE (${h.version})`;
+        }
+      } catch (e) {
+        document.getElementById('gatewayStatus').innerText = 'GATEWAY OFFLINE';
+      }
+    }
+
+    // 8. Sentinel Audit Execution with Multi-Horizon Real Backend Calls
     async function executeSentinelAudit() {
       const btn = document.getElementById('btnAudit');
       btn.disabled = true;
-      btn.innerHTML = '<i data-lucide="loader" style="width:16px; animation:spin 1s linear infinite;"></i> Analyzing Reliability...';
+      btn.innerHTML = '<i data-lucide="loader" style="width:16px; animation:spin 1s linear infinite;"></i> Auditing Reliability...';
       lucide.createIcons();
 
       const loc = document.getElementById('locQuery').value.trim();
@@ -1575,6 +1592,7 @@ Awaiting analysis audit trigger...
       activeToken = document.getElementById('apiKeyInput').value.trim();
 
       try {
+        // Geocode location if text name provided
         if (loc && !loc.startsWith('Coordinates')) {
           const resLoc = await fetch(`${API_BASE}/v1/location/resolve?query=${encodeURIComponent(loc)}`);
           if (resLoc.ok) {
@@ -1589,6 +1607,7 @@ Awaiting analysis audit trigger...
           }
         }
 
+        // 1. Primary Single Prediction Request (Real Backend NWP + ML)
         const res = await fetch(`${API_BASE}/v1/predict`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-API-Key': activeToken },
@@ -1601,7 +1620,29 @@ Awaiting analysis audit trigger...
         }
 
         const data = await res.json();
-        renderAuditResults(data, lead);
+
+        // 2. Parallel Real Batch Request across all horizons to populate chart with 100% real data
+        const horizonPayload = {
+          items: [24, 48, 72, 120, 240].map(h => ({
+            location: loc || "Target",
+            latitude: lat,
+            longitude: lon,
+            lead_hours: h
+          }))
+        };
+
+        const batchRes = await fetch(`${API_BASE}/v1/predict/batch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-API-Key': activeToken },
+          body: JSON.stringify(horizonPayload)
+        });
+
+        let multiHorizonData = null;
+        if (batchRes.ok) {
+          multiHorizonData = await batchRes.json();
+        }
+
+        renderAuditResults(data, multiHorizonData);
         document.getElementById('timestampBadge').innerText = `AUDIT ${new Date().toISOString().slice(11, 19)}Z`;
       } catch (err) {
         showBanner(`Sentinel Audit Failed: ${err.message}`, true);
@@ -1612,7 +1653,7 @@ Awaiting analysis audit trigger...
       }
     }
 
-    function renderAuditResults(d, currentLead = 48) {
+    function renderAuditResults(d, multiHorizonData) {
       const probPct = (d.bust_probability * 100).toFixed(1);
       document.getElementById('valBustProb').innerText = `${probPct}%`;
 
@@ -1644,7 +1685,7 @@ Awaiting analysis audit trigger...
         if (el) el.innerText = d.provider_provenance;
       });
 
-      // Conformal Range Track
+      // Conformal Range Track Calculation
       document.getElementById('lblLower').innerText = `${d.conformal_lower}°C`;
       document.getElementById('lblUpper').innerText = `${d.conformal_upper}°C`;
       const median = ((d.conformal_lower + d.conformal_upper) / 2).toFixed(1);
@@ -1663,18 +1704,12 @@ Awaiting analysis audit trigger...
       const marginDeg = (d.conformal_upper - d.conformal_lower) / 2;
       uncertaintyCircle.setRadius(Math.max(marginDeg * 25000, 15000));
 
-      // Update Chart Real-Time Projection Curves
-      if (forecastChart) {
-        const medVal = parseFloat(median);
-        const marginVal = parseFloat((d.conformal_upper - d.conformal_lower) / 2);
-        const baseProb = d.bust_probability * 100;
-
-        // Dynamic multi-horizon envelope calculations
-        const leads = [24, 48, 72, 120, 240];
-        const upperCurve = leads.map(h => parseFloat((medVal + marginVal * Math.sqrt(h / currentLead)).toFixed(1)));
-        const lowerCurve = leads.map(h => parseFloat((medVal - marginVal * Math.sqrt(h / currentLead)).toFixed(1)));
-        const tempCurve = leads.map(() => medVal);
-        const probCurve = leads.map(h => Math.min(98, Math.max(8, parseFloat((baseProb * Math.pow(h / currentLead, 0.45)).toFixed(1)))));
+      // Update Chart with Real Multi-Horizon Data from the Backend
+      if (forecastChart && multiHorizonData && multiHorizonData.results) {
+        const upperCurve = multiHorizonData.results.map(r => r.conformal_upper);
+        const lowerCurve = multiHorizonData.results.map(r => r.conformal_lower);
+        const tempCurve = multiHorizonData.results.map(r => parseFloat(((r.conformal_lower + r.conformal_upper) / 2).toFixed(1)));
+        const probCurve = multiHorizonData.results.map(r => parseFloat((r.bust_probability * 100).toFixed(1)));
 
         forecastChart.data.datasets[0].data = upperCurve;
         forecastChart.data.datasets[1].data = lowerCurve;
@@ -1695,7 +1730,7 @@ Awaiting analysis audit trigger...
 • STATUS               : INTEGRITY GUARANTEED`;
     }
 
-    // 8. Batch Sync Dispatch
+    // 9. Batch Sync Dispatch
     async function executeSyncBatch() {
       activeToken = document.getElementById('apiKeyInput').value.trim();
       const raw = document.getElementById('batchJsonInput').value;
@@ -1737,7 +1772,7 @@ Awaiting analysis audit trigger...
       document.getElementById('batchSummaryStats').innerText = `${results.length} Items Processed`;
     }
 
-    // 9. Batch Async Dispatch & Polling
+    // 10. Batch Async Dispatch & Polling
     async function executeAsyncJob() {
       const btn = document.getElementById('btnAsyncJob');
       activeToken = document.getElementById('apiKeyInput').value.trim();
@@ -1784,7 +1819,7 @@ Awaiting analysis audit trigger...
       }
     }
 
-    // 10. Model Registry
+    // 11. Model Registry
     async function fetchModelCatalog() {
       try {
         const res = await fetch(`${API_BASE}/v1/models`);
@@ -1821,7 +1856,7 @@ Awaiting analysis audit trigger...
       }
     }
 
-    // 11. Metrics Scrape
+    // 12. Metrics Scrape
     async function fetchMetricsScrape() {
       try {
         const res = await fetch(`${API_BASE}/metrics`);
@@ -1835,7 +1870,7 @@ Awaiting analysis audit trigger...
       }
     }
 
-    // 12. User Preferences
+    // 13. User Preferences
     async function saveUserPreferences() {
       activeToken = document.getElementById('apiKeyInput').value.trim();
       const thresh = parseFloat(document.getElementById('alertSlider').value);
@@ -1855,7 +1890,7 @@ Awaiting analysis audit trigger...
       }
     }
 
-    // 13. Ground Truth Ingestion
+    // 14. Ground Truth Ingestion
     async function submitActualObservation() {
       const adminKey = document.getElementById('apiKeyInput').value.trim();
       const obs = parseFloat(document.getElementById('actualObsTemp').value);
@@ -1880,8 +1915,9 @@ Awaiting analysis audit trigger...
       }
     }
 
-    // 14. Mount Initialization
+    // 15. Mount Initialization
     initForecastChart();
+    checkLiveness();
     executeSentinelAudit();
     fetchModelCatalog();
   </script>
