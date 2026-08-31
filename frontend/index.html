@@ -1,562 +1,206 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Veyra | Forecast Reliability &amp; Bust Intelligence</title>
-
-  <!-- Leaflet + Google Fonts -->
+  <title>Veyra V4.0 — Atmospheric Reliability Sentinel</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
-
   <style>
     :root {
-      --noaa-dark-blue: #1b4f8b;
-      --noaa-blue: #205493;
-      --noaa-light-blue: #dce4ef;
-      --noaa-accent: #0071bc;
-      --noaa-gray-bg: #f5f5f5;
-      --noaa-card-bg: #ffffff;
-      --noaa-border: #d0d0d0;
-      --noaa-text: #212121;
-      --noaa-muted: #555555;
-      --risk-low: #2e8540;
-      --risk-medium: #d97706;
-      --risk-high: #cd2026;
-      --risk-critical: #991b1b;
+      --bg-dark: #090d16;
+      --panel-bg: #111827;
+      --card-bg: #1f2937;
+      --border-color: #374151;
+      --accent-blue: #3b82f6;
+      --accent-cyan: #06b6d4;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --risk-low: #10b981;
+      --risk-med: #f59e0b;
+      --risk-high: #ef4444;
+      --risk-crit: #8b5cf6;
     }
-
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    body {
-      font-family: 'Source Sans 3', sans-serif;
-      background-color: var(--noaa-gray-bg);
-      color: var(--noaa-text);
-      line-height: 1.5;
-      font-size: 16px;
-    }
-
-    .mono {
-      font-family: 'JetBrains Mono', monospace;
-    }
-
-    /* ============ Header ============ */
-    .agency-banner {
-      background-color: var(--noaa-dark-blue);
-      color: white;
-      padding: 12px 24px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 3px solid var(--noaa-accent);
-    }
-
-    .agency-title {
-      font-size: 1.25rem;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-    }
-
-    .agency-subtitle {
-      font-size: 0.85rem;
-      opacity: 0.9;
-      margin-left: 12px;
-      font-weight: 400;
-    }
-
-    .status-badge {
-      background-color: rgba(255, 255, 255, 0.15);
-      padding: 4px 12px;
-      border-radius: 12px;
-      font-size: 0.8rem;
-      font-weight: 600;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background-color: #4caf50;
-      animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-      0% { opacity: 1; }
-      50% { opacity: 0.4; }
-      100% { opacity: 1; }
-    }
-
-    /* ============ Navigation ============ */
-    .main-nav {
-      background-color: var(--noaa-blue);
-      display: flex;
-      padding: 0 24px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-
-    .main-nav span {
-      color: white;
-      padding: 10px 16px;
-      font-size: 0.9rem;
-      font-weight: 600;
-      background-color: rgba(255,255,255,0.15);
-      border-bottom: 3px solid #ffd200;
-    }
-
-    /* ============ Layout ============ */
-    .breadcrumb {
-      padding: 14px 24px 0;
-      font-size: 0.85rem;
-      color: var(--noaa-muted);
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 20px 24px 40px;
-      display: grid;
-      grid-template-columns: 340px 1fr;
-      gap: 24px;
-    }
-
-    .card {
-      background-color: var(--noaa-card-bg);
-      border: 1px solid var(--noaa-border);
-      border-radius: 3px;
-      padding: 20px;
-      margin-bottom: 20px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    }
-
-    .card-header {
-      border-bottom: 2px solid var(--noaa-light-blue);
-      padding-bottom: 10px;
-      margin-bottom: 15px;
-      font-size: 1.1rem;
-      font-weight: 600;
-      color: var(--noaa-dark-blue);
-    }
-
-    label {
-      display: block;
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: var(--noaa-muted);
-      margin-bottom: 4px;
-    }
-
-    input, select {
-      width: 100%;
-      padding: 8px 10px;
-      border: 1px solid #b0b0b0;
-      border-radius: 3px;
-      font-size: 0.95rem;
-      font-family: inherit;
-      background: white;
-      transition: border-color 0.2s;
-    }
-
-    input:focus, select:focus {
-      outline: none;
-      border-color: var(--noaa-accent);
-      box-shadow: 0 0 0 2px rgba(0,113,188,0.2);
-    }
-
-    .btn-primary {
-      background-color: var(--noaa-blue);
-      color: white;
-      border: none;
-      padding: 10px 16px;
-      font-weight: 600;
-      font-size: 0.95rem;
-      border-radius: 3px;
-      cursor: pointer;
-      width: 100%;
-      transition: background-color 0.2s;
-    }
-
-    .btn-primary:hover {
-      background-color: var(--noaa-dark-blue);
-    }
-
-    .btn-primary:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
-    .metrics-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 16px;
-      margin-bottom: 20px;
-    }
-
-    .metric-box {
-      background-color: #fafafa;
-      border: 1px solid var(--noaa-border);
-      border-radius: 3px;
-      padding: 14px;
-      text-align: center;
-    }
-
-    .metric-label {
-      font-size: 0.75rem;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--noaa-muted);
-    }
-
-    .metric-value {
-      font-size: 1.6rem;
-      font-weight: 700;
-      margin-top: 4px;
-    }
-
-    .risk-low { color: var(--risk-low); }
-    .risk-medium { color: var(--risk-medium); }
-    .risk-high { color: var(--risk-high); }
-    .risk-critical { color: var(--risk-critical); }
-
-    .map-container {
-      height: 380px;
-      border-radius: 3px;
-      border: 1px solid var(--noaa-border);
-      margin-top: 10px;
-    }
-
-    .notice-box {
-      background-color: #fff3cd;
-      border-left: 4px solid #fdb81b;
-      padding: 12px 15px;
-      font-size: 0.88rem;
-      margin-top: 15px;
-      border-radius: 2px;
-    }
-
-    footer {
-      background-color: var(--noaa-dark-blue);
-      color: white;
-      padding: 20px 24px;
-      text-align: center;
-      font-size: 0.85rem;
-      margin-top: 40px;
-    }
-
-    @media (max-width: 768px) {
-      .container {
-        grid-template-columns: 1fr;
-        padding: 12px;
-      }
-      .agency-banner {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 6px;
-      }
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: var(--bg-dark); color: var(--text-main); min-height: 100vh; padding: 24px; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 16px; margin-bottom: 24px; }
+    .logo { font-size: 24px; font-weight: 800; background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .badge-v4 { background: #1e3a8a; color: #93c5fd; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; }
+    .grid { display: grid; grid-template-columns: 380px 1fr; gap: 24px; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    .panel { background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; }
+    .form-group { margin-bottom: 16px; }
+    label { display: block; font-size: 13px; color: var(--text-muted); margin-bottom: 6px; font-weight: 500; }
+    input, select { width: 100%; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px; color: var(--text-main); font-size: 14px; }
+    input:focus, select:focus { outline: none; border-color: var(--accent-blue); }
+    .btn { width: 100%; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff; border: none; border-radius: 8px; padding: 12px; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
+    .btn:hover { opacity: 0.9; }
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 20px; }
+    .metric-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px; text-align: center; }
+    .metric-title { font-size: 12px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px; }
+    .metric-value { font-size: 22px; font-weight: 700; }
+    #map { height: 340px; border-radius: 10px; border: 1px solid var(--border-color); margin-top: 16px; }
+    .provenance-pill { display: inline-block; padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; background: #374151; }
+    .banner { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 13px; display: none; }
+    .banner.error { background: #450a0a; border: 1px solid #7f1d1d; color: #fca5a5; }
   </style>
 </head>
 <body>
-
-  <!-- ============ Agency Banner ============ -->
-  <div class="agency-banner">
-    <div>
-      <span class="agency-title">VEYRA</span>
-      <span class="agency-subtitle">Atmospheric Forecast Reliability &amp; Bust Intelligence</span>
+  <div class="header">
+    <div style="display:flex; align-items:center; gap:12px;">
+      <span class="logo">VEYRA ATMOSPHERIC SENTINEL</span>
+      <span class="badge-v4">v4.0.0-rc1 Enterprise</span>
     </div>
-    <div style="display:flex; gap:12px; align-items:center;">
-      <span class="status-badge">
-        <span class="status-dot"></span> System Online &nbsp;|&nbsp; API v1.0.0
-      </span>
+    <div id="statusBeacon" style="font-size: 13px; color: #10b981;">● Multi-Provider Gateway Nominal</div>
+  </div>
+
+  <div id="errorBanner" class="banner error"></div>
+
+  <div class="grid">
+    <div class="panel">
+      <h3 style="margin-bottom: 16px; font-size: 16px;">Target Ingestion & Horizon</h3>
+      <div class="form-group">
+        <label>Location Name / Coordinates</label>
+        <input type="text" id="locInput" value="Kolkata" placeholder="City name or 'lat, lon'" />
+      </div>
+      <div class="form-group" style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+        <div>
+          <label>Latitude</label>
+          <input type="number" id="latInput" value="22.5726" step="0.0001" />
+        </div>
+        <div>
+          <label>Longitude</label>
+          <input type="number" id="lonInput" value="88.3639" step="0.0001" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Forecast Lead Horizon</label>
+        <select id="leadSelect">
+          <option value="24">24 Hours (Day 1)</option>
+          <option value="48" selected>48 Hours (Day 2)</option>
+          <option value="72">72 Hours (Day 3)</option>
+          <option value="120">120 Hours (Day 5)</option>
+          <option value="240">240 Hours (Extended 10-Day)</option>
+        </select>
+      </div>
+      <button class="btn" id="analyzeBtn">Audit Forecast Reliability</button>
+      <div id="map"></div>
+    </div>
+
+    <div class="panel">
+      <h3 style="margin-bottom: 16px; font-size: 16px;">Statistical Sentinel & Uncertainty Assessment</h3>
+      <div class="card-grid">
+        <div class="metric-card">
+          <div class="metric-title">Bust Probability</div>
+          <div class="metric-value" id="bustProbVal" style="color: var(--risk-med);">--</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-title">Risk Tier</div>
+          <div class="metric-value" id="riskTierVal">--</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-title">90% Conformal Range</div>
+          <div class="metric-value" id="conformalVal" style="font-size: 18px; color: var(--accent-cyan);">--</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-title">OOD Novelty Score</div>
+          <div class="metric-value" id="noveltyVal" style="font-size: 18px;">--</div>
+        </div>
+      </div>
+
+      <div style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px; margin-bottom: 16px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom: 8px;">
+          <span style="font-size: 13px; color: var(--text-muted);">Trust State</span>
+          <span id="trustBadge" class="provenance-pill" style="background:#065f46; color:#a7f3d0;">SUPPORTED</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-bottom: 8px;">
+          <span style="font-size: 13px; color: var(--text-muted);">Active Provider Provenance</span>
+          <span id="providerBadge" class="provenance-pill">open-meteo-ensemble</span>
+        </div>
+        <div style="display:flex; justify-content:space-between;">
+          <span style="font-size: 13px; color: var(--text-muted);">Model Artifact</span>
+          <span style="font-size: 12px; color: #9ca3af;">veyra-bust-2.1.0 (SHA: adaec18c)</span>
+        </div>
+      </div>
+
+      <h4 style="font-size: 14px; margin-bottom: 8px; color: var(--text-muted);">Physical Atmospheric Attribution</h4>
+      <div id="evidenceBox" style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; font-size: 13px; color: #d1d5db;">
+        Awaiting analysis trigger...
+      </div>
     </div>
   </div>
 
-  <!-- ============ Single-Topic Navigation ============ -->
-  <nav class="main-nav">
-    <span>Forecast Evaluation</span>
-  </nav>
-
-  <!-- ============ Breadcrumb ============ -->
-  <div class="breadcrumb">
-    <span>Veyra Diagnostic Suite</span> &gt; <strong>Temperature Forecast Bust Intelligence</strong>
-  </div>
-
-  <!-- ============ Main Content ============ -->
-  <main class="container">
-
-    <!-- Left Column: Input Parameters -->
-    <div class="card">
-      <h2 class="card-header">Evaluation Parameters</h2>
-      <form id="prediction-form" style="display: flex; flex-direction: column; gap: 16px;">
-        <div>
-          <label for="location">Target Location (City or Region)</label>
-          <input type="text" id="location" value="Kolkata" required autocomplete="off" />
-          <small style="color:var(--noaa-muted); font-size:0.78rem;">Auto-geocodes on typing or map click</small>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-          <div>
-            <label for="latitude">Latitude</label>
-            <input type="number" step="any" id="latitude" value="22.5726" required />
-          </div>
-          <div>
-            <label for="longitude">Longitude</label>
-            <input type="number" step="any" id="longitude" value="88.3639" required />
-          </div>
-        </div>
-        <div>
-          <label for="variable">Atmospheric Variable</label>
-          <input type="text" id="variable" value="Temperature (2m)" readonly style="background-color:#e9ecef; cursor:not-allowed;" />
-        </div>
-        <div>
-          <label for="lead_hours">Lead Horizon</label>
-          <select id="lead_hours">
-            <option value="24">24 Hours (Day +1)</option>
-            <option value="48" selected>48 Hours (Day +2)</option>
-            <option value="72">72 Hours (Day +3)</option>
-            <option value="120">120 Hours (Day +5)</option>
-            <option value="240">240 Hours (Day +10)</option>
-          </select>
-        </div>
-        <button type="submit" id="submit-btn" class="btn-primary">Evaluate Reliability</button>
-      </form>
-      <div class="notice-box">
-        <strong>Diagnostic Criteria:</strong> Bust probability measures the risk of numerical weather predictions failing beyond acceptable error thresholds. Probability &ge;60% denotes HIGH bust risk.
-      </div>
-    </div>
-
-    <!-- Right Column: Live Results & Map -->
-    <div>
-      <div class="card">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
-          <div>
-            <h2 class="card-header" style="border-bottom: none; padding-bottom:0; margin-bottom:4px;">
-              Analysis Target: <span id="res-location">Kolkata</span>
-            </h2>
-            <p style="font-size: 0.85rem; color: var(--noaa-muted);" id="res-meta">
-              Provider: open-meteo-primary &nbsp;|&nbsp; Model Engine: v2.1.0-prod
-            </p>
-          </div>
-          <span id="res-trust-badge" style="background-color: #e6f4e6; color: #2e8540; padding: 4px 12px; border-radius: 14px; font-size: 0.8rem; font-weight: 600;">
-            SUPPORTED
-          </span>
-        </div>
-
-        <!-- Metrics Grid -->
-        <div class="metrics-grid" style="margin-top: 15px;">
-          <div class="metric-box">
-            <div class="metric-label">Bust Probability</div>
-            <div class="metric-value mono" id="res-prob">--%</div>
-          </div>
-          <div class="metric-box">
-            <div class="metric-label">Risk Tier</div>
-            <div class="metric-value risk-medium mono" id="res-risk">PENDING</div>
-          </div>
-          <div class="metric-box">
-            <div class="metric-label">Conformal Interval (90%)</div>
-            <div class="metric-value mono" id="res-conformal" style="font-size:1.15rem;">[--°C , --°C]</div>
-          </div>
-        </div>
-
-        <!-- GIS Surveillance Map -->
-        <h3 style="font-size:1rem; font-weight:600; color:var(--noaa-dark-blue); margin-top:20px; margin-bottom:8px;">
-          Spatial Reliability Assessment
-        </h3>
-        <div id="map" class="map-container"></div>
-      </div>
-
-      <!-- Methodology Box -->
-      <div class="card" style="background-color:#f0f7ff; border-left: 4px solid var(--noaa-accent);">
-        <h3 class="card-header" style="border-bottom: none; margin-bottom:6px;">Scientific Architecture</h3>
-        <p style="font-size:0.9rem; color:#333;">
-          Bust probability is computed dynamically using multi-provider NWP hourly forecast series, local atmospheric variance, and calibrated ML isotonic ensembles. Conformal intervals are evaluated at the 90% confidence level centered on live forecast temperatures.
-        </p>
-      </div>
-    </div>
-  </main>
-
-  <!-- ============ Footer ============ -->
-  <footer>
-    <div>
-      <strong>VEYRA Research Environment</strong> &nbsp;|&nbsp; Experimental Atmospheric Reliability System
-    </div>
-    <div style="margin-top:8px; opacity:0.8;">
-      &copy; 2026 Veyra. All diagnostic outputs are generated live via numerical weather prediction pipelines.
-    </div>
-  </footer>
-
-  <!-- ============ Integrated Engine ============ -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     const API_BASE = "https://veyra-v1-0.onrender.com";
-    const CLIENT_TOKEN = "veyra-public-client-token";
+    const AUTH_HEADER = { "X-API-Key": "veyra-public-client-token", "Content-Type": "application/json" };
 
-    function escapeHtml(str) {
-      const div = document.createElement("div");
-      div.textContent = str;
-      return div.innerHTML;
-    }
+    const map = L.map('map').setView([22.5726, 88.3639], 5);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 18 }).addTo(map);
+    let marker = L.marker([22.5726, 88.3639]).addTo(map);
 
-    const map = L.map("map").setView([22.5726, 88.3639], 5);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: "&copy; OpenStreetMap contributors"
-    }).addTo(map);
-
-    let marker = L.marker([22.5726, 88.3639]).addTo(map)
-      .bindPopup("<b>Kolkata</b><br>Initial Target")
-      .openPopup();
-
-    map.on("click", (e) => {
-      const lat = parseFloat(e.latlng.lat.toFixed(4));
-      const lon = parseFloat(e.latlng.lng.toFixed(4));
-      document.getElementById("latitude").value = lat;
-      document.getElementById("longitude").value = lon;
-      document.getElementById("location").value = `Coordinates (${lat}, ${lon})`;
-      marker.setLatLng([lat, lon]);
-      marker.setPopupContent(`<b>Target</b><br>${lat}, ${lon}`).openPopup();
+    map.on('click', e => {
+      document.getElementById('latInput').value = e.latlng.lat.toFixed(4);
+      document.getElementById('lonInput').value = e.latlng.lng.toFixed(4);
+      marker.setLatLng(e.latlng);
     });
 
-    async function resolveLocationCoordinates(query) {
-      if (!query || query.trim().length === 0) return null;
+    async function analyze() {
+      const banner = document.getElementById('errorBanner');
+      banner.style.display = 'none';
+      const loc = document.getElementById('locInput').value.trim();
+      let lat = parseFloat(document.getElementById('latInput').value);
+      let lon = parseFloat(document.getElementById('lonInput').value);
+      const lead = parseInt(document.getElementById('leadSelect').value, 10);
+
       try {
-        const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query.trim())}&count=1&language=en&format=json`;
-        const res = await fetch(geoUrl);
-        const data = await res.json();
-        if (data.results && data.results.length > 0) {
-          const top = data.results[0];
-          return {
-            lat: parseFloat(top.latitude.toFixed(4)),
-            lon: parseFloat(top.longitude.toFixed(4)),
-            name: `${top.name}${top.admin1 ? ", " + top.admin1 : ""}, ${top.country_code || ""}`
-          };
-        }
-      } catch (err) {
-        console.warn("Geocoding lookup error:", err);
-      }
-      return null;
-    }
-
-    const locationInput = document.getElementById("location");
-    let debounceTimer;
-
-    locationInput.addEventListener("input", () => {
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(async () => {
-        const query = locationInput.value;
-        if (query.length >= 3 && !query.startsWith("Coordinates")) {
-          const match = await resolveLocationCoordinates(query);
-          if (match) {
-            document.getElementById("latitude").value = match.lat;
-            document.getElementById("longitude").value = match.lon;
-            marker.setLatLng([match.lat, match.lon]);
-            marker.setPopupContent(`<b>${escapeHtml(match.name)}</b>`).openPopup();
-            map.flyTo([match.lat, match.lon], 7, { duration: 1.2 });
+        if (loc) {
+          const resLoc = await fetch(`${API_BASE}/v1/location/resolve?query=${encodeURIComponent(loc)}`, { headers: AUTH_HEADER });
+          if (resLoc.ok) {
+            const locData = await resLoc.json();
+            lat = locData.latitude;
+            lon = locData.longitude;
+            document.getElementById('latInput').value = lat;
+            document.getElementById('lonInput').value = lon;
+            marker.setLatLng([lat, lon]);
+            map.setView([lat, lon], 7);
           }
         }
-      }, 400);
-    });
 
-    async function evaluateForecast() {
-      const btn = document.getElementById("submit-btn");
-      btn.disabled = true;
-      btn.innerText = "Evaluating Forecast...";
-
-      let loc = document.getElementById("location").value.trim();
-      let lat = parseFloat(document.getElementById("latitude").value);
-      let lon = parseFloat(document.getElementById("longitude").value);
-      const leadHours = parseInt(document.getElementById("lead_hours").value, 10);
-
-      if (isNaN(lat) || isNaN(lon) || !loc.startsWith("Coordinates")) {
-        const resolved = await resolveLocationCoordinates(loc);
-        if (resolved) {
-          lat = resolved.lat;
-          lon = resolved.lon;
-          loc = resolved.name;
-          document.getElementById("latitude").value = lat;
-          document.getElementById("longitude").value = lon;
-          document.getElementById("location").value = loc;
-        }
-      }
-
-      if (isNaN(lat) || isNaN(lon)) {
-        alert("Invalid geographic coordinates. Please pick a location on the map.");
-        btn.disabled = false;
-        btn.innerText = "Evaluate Reliability";
-        return;
-      }
-
-      const payload = {
-        location: loc,
-        latitude: lat,
-        longitude: lon,
-        variable: "temperature_2m",
-        lead_hours: leadHours
-      };
-
-      try {
         const res = await fetch(`${API_BASE}/v1/predict`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-API-Key": CLIENT_TOKEN
-          },
-          body: JSON.stringify(payload)
+          method: 'POST',
+          headers: AUTH_HEADER,
+          body: JSON.stringify({ location: loc || "Target", latitude: lat, longitude: lon, lead_hours: lead })
         });
 
+        if (!res.ok) throw new Error(`API Error: HTTP ${res.status}`);
         const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.detail || "Forecast evaluation failed");
+
+        document.getElementById('bustProbVal').innerText = `${(data.bust_probability * 100).toFixed(1)}%`;
+        document.getElementById('riskTierVal').innerText = data.risk_level;
+        document.getElementById('conformalVal').innerText = `${data.conformal_lower}°C to ${data.conformal_upper}°C`;
+        document.getElementById('noveltyVal').innerText = data.novelty_score.toFixed(3);
+        document.getElementById('providerBadge').innerText = data.provider_provenance;
+        document.getElementById('trustBadge').innerText = data.trust_state;
+
+        const trustEl = document.getElementById('trustBadge');
+        if (data.trust_state === 'DEGRADED') {
+          trustEl.style.background = '#78350f'; trustEl.style.color = '#fde68a';
+        } else {
+          trustEl.style.background = '#065f46'; trustEl.style.color = '#a7f3d0';
         }
 
-        document.getElementById("res-location").innerText = data.location;
-        document.getElementById("res-prob").innerText = `${(data.bust_probability * 100).toFixed(1)}%`;
-        document.getElementById("res-meta").innerText = `Provider: ${data.provider_provenance} | Model Engine: ${data.model_version}`;
-
-        const riskEl = document.getElementById("res-risk");
-        riskEl.innerText = data.risk_level;
-
-        let riskClass = "risk-low";
-        if (data.risk_level === "MEDIUM") riskClass = "risk-medium";
-        else if (data.risk_level === "HIGH") riskClass = "risk-high";
-        else if (data.risk_level === "CRITICAL") riskClass = "risk-critical";
-
-        riskEl.className = `metric-value mono ${riskClass}`;
-
-        const trustBadge = document.getElementById("res-trust-badge");
-        trustBadge.innerText = data.trust_state;
-        trustBadge.style.backgroundColor = data.trust_state === "SUPPORTED" ? "#e6f4e6" : "#fff3cd";
-        trustBadge.style.color = data.trust_state === "SUPPORTED" ? "#2e8540" : "#d97706";
-
-        document.getElementById("res-conformal").innerText = `[${data.conformal_lower}°C , ${data.conformal_upper}°C]`;
-
-        marker.setLatLng([lat, lon]);
-        marker.setPopupContent(`<b>${escapeHtml(data.location)}</b><br>Lead: +${leadHours}h<br>Bust Risk: ${(data.bust_probability * 100).toFixed(1)}%<br>Tier: ${data.risk_level}`).openPopup();
-        map.flyTo([lat, lon], 6, { duration: 1.0 });
-
+        document.getElementById('evidenceBox').innerHTML = `
+          <strong>Evidence Signals:</strong> ${data.evidence.join(', ')}<br>
+          <strong>Reason Codes:</strong> ${data.reason_codes.join(', ')}<br>
+          <strong>Canonical Schema:</strong> ${data.feature_schema_version}
+        `;
       } catch (err) {
-        alert("Evaluation Error: " + err.message);
-      } finally {
-        btn.disabled = false;
-        btn.innerText = "Evaluate Reliability";
+        banner.style.display = 'block';
+        banner.innerText = `Audit Failed: ${err.message}`;
       }
     }
 
-    document.getElementById("prediction-form").addEventListener("submit", (e) => {
-      e.preventDefault();
-      evaluateForecast();
-    });
-
-    evaluateForecast();
+    document.getElementById('analyzeBtn').addEventListener('click', analyze);
   </script>
 </body>
 </html>
