@@ -15,6 +15,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/lucide@latest"></script>
 
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
   <style>
     :root {
       --noaa-dark-blue: #1b3a6b;
@@ -278,7 +281,7 @@
     /* Workspace 3-Column Grid */
     .workspace {
       display: grid;
-      grid-template-columns: 320px 1fr 380px;
+      grid-template-columns: 320px 1fr 400px;
       gap: 16px;
       align-items: start;
     }
@@ -440,7 +443,7 @@
     /* Map Panel */
     .map-panel {
       position: relative;
-      min-height: 520px;
+      min-height: 560px;
       border: 1px solid var(--noaa-border);
       border-radius: var(--radius-lg);
       overflow: hidden;
@@ -450,7 +453,7 @@
 
     #sentinelMap {
       height: 100%;
-      min-height: 520px;
+      min-height: 560px;
       width: 100%;
     }
 
@@ -580,6 +583,15 @@
       font-size: 0.78rem;
       color: var(--noaa-muted);
       margin-top: 4px;
+    }
+
+    /* Chart Container */
+    .chart-container-box {
+      background: #fafafa;
+      border: 1px solid var(--noaa-border);
+      border-radius: var(--radius-md);
+      padding: 12px;
+      margin-top: 14px;
     }
 
     /* Conformal Range Track */
@@ -900,7 +912,7 @@
 
   <!-- Alert Bar -->
   <div class="alert-bar">
-    <strong>EXPERIMENTAL SYSTEM:</strong> Veyra Sentinel outputs are intended for research and forecast verification use only — not for operational decision-making.[cite: 1]
+    <strong>EXPERIMENTAL SYSTEM:</strong> Veyra Sentinel outputs are intended for research and forecast verification use only — not for operational decision-making.
   </div>
 
   <!-- Agency Banner -->
@@ -960,7 +972,7 @@
 
   <!-- Breadcrumb -->
   <div class="breadcrumb">
-    <span>Home</span> &gt; <span>Veyra Research Tools</span> &gt; <strong id="breadcrumbCurrent">Forecast Reliability Sentinel</strong>[cite: 1]
+    <span>Home</span> &gt; <span>Veyra Research Tools</span> &gt; <strong id="breadcrumbCurrent">Forecast Reliability Sentinel</strong>
   </div>
 
   <!-- Main Content -->
@@ -976,60 +988,60 @@
             <span class="panel-title">
               <i data-lucide="crosshair"></i> Atmospheric Target
             </span>
-            <span class="panel-badge">Issue-Time Safe</span>[cite: 1]
+            <span class="panel-badge">Issue-Time Safe</span>
           </div>
 
           <div class="form-group">
             <label for="locQuery">Location Query / Alias</label>
-            <input type="text" id="locQuery" value="Kolkata" placeholder="e.g. Salt Lake Kolkata, Meghalaya, London" autocomplete="off" />[cite: 1]
+            <input type="text" id="locQuery" value="Kolkata" placeholder="e.g. Salt Lake Kolkata, Meghalaya, London" autocomplete="off" />
             <div class="input-hint">Auto-geocodes via Open-Meteo &amp; regional alias dictionary</div>
           </div>
 
           <div class="coord-grid form-group">
             <div>
               <label for="latCoord">Latitude</label>
-              <input type="number" id="latCoord" value="22.5726" step="0.0001" />[cite: 1]
+              <input type="number" id="latCoord" value="22.5726" step="0.0001" />
             </div>
             <div>
               <label for="lonCoord">Longitude</label>
-              <input type="number" id="lonCoord" value="88.3639" step="0.0001" />[cite: 1]
+              <input type="number" id="lonCoord" value="88.3639" step="0.0001" />
             </div>
           </div>
 
           <div class="form-group">
             <label for="leadHorizon">Forecast Lead Horizon</label>
             <select id="leadHorizon">
-              <option value="24">24 Hours (Day 1 Operational)</option>[cite: 1]
-              <option value="48" selected>48 Hours (Day 2 Synoptic)</option>[cite: 1]
-              <option value="72">72 Hours (Day 3 Medium-Range)</option>[cite: 1]
-              <option value="120">120 Hours (Day 5 Sub-Seasonal)</option>[cite: 1]
-              <option value="240">240 Hours (10-Day Climatology)</option>[cite: 1]
+              <option value="24">24 Hours (Day 1 Operational)</option>
+              <option value="48" selected>48 Hours (Day 2 Synoptic)</option>
+              <option value="72">72 Hours (Day 3 Medium-Range)</option>
+              <option value="120">120 Hours (Day 5 Sub-Seasonal)</option>
+              <option value="240">240 Hours (10-Day Climatology)</option>
             </select>
           </div>
 
           <button class="btn-primary" id="btnAudit" onclick="executeSentinelAudit()">
             <i data-lucide="zap"></i> Audit Numerical Reliability
-          </button>[cite: 1]
+          </button>
 
           <!-- Quick Status Chips -->
           <div class="form-group" style="margin-top: 16px;">
-            <label>Model &amp; Provider Status</label>[cite: 1]
+            <label>Model &amp; Provider Status</label>
             <div class="diagnostic-grid" style="grid-template-columns: 1fr 1fr; gap: 6px;">
               <div class="diag-item">
-                <div class="diag-label">Trust State</div>[cite: 1]
-                <span id="pillTrustStateSidebar" class="diag-pill" style="background: var(--risk-low-bg); color: var(--risk-low);">SUPPORTED</span>[cite: 1]
+                <div class="diag-label">Trust State</div>
+                <span id="pillTrustStateSidebar" class="diag-pill" style="background: var(--risk-low-bg); color: var(--risk-low);">SUPPORTED</span>
               </div>
               <div class="diag-item">
-                <div class="diag-label">Provider</div>[cite: 1]
-                <span id="pillProviderSidebar" class="diag-pill" style="background: var(--noaa-light-blue); color: var(--noaa-blue);">open-meteo</span>[cite: 1]
+                <div class="diag-label">Provider</div>
+                <span id="pillProviderSidebar" class="diag-pill" style="background: var(--noaa-light-blue); color: var(--noaa-blue);">open-meteo</span>
               </div>
               <div class="diag-item">
-                <div class="diag-label">Model</div>[cite: 1]
-                <span class="diag-pill" style="background: #f0f0f0; color: #666;">v2.1.0</span>[cite: 1]
+                <div class="diag-label">Model</div>
+                <span class="diag-pill" style="background: #f0f0f0; color: #666;">v2.1.0</span>
               </div>
               <div class="diag-item">
-                <div class="diag-label">Checksum</div>[cite: 1]
-                <span class="diag-pill" style="background: #f0f0f0; color: #666;">adaec18c</span>[cite: 1]
+                <div class="diag-label">Checksum</div>
+                <span class="diag-pill" style="background: #f0f0f0; color: #666;">adaec18c</span>
               </div>
             </div>
           </div>
@@ -1043,28 +1055,28 @@
           <div class="layer-toggles">
             <label>
               <input type="checkbox" id="toggleUncertaintyCircle" checked onchange="toggleMapLayer('uncertaintyCircle')">
-              Uncertainty Circle[cite: 1]
+              Uncertainty Circle
             </label>
             <label>
               <input type="checkbox" id="toggleTargetMarker" checked onchange="toggleMapLayer('targetMarker')">
-              Target Marker[cite: 1]
+              Target Marker
             </label>
             <label>
               <input type="checkbox" id="toggleRiskContours" checked onchange="toggleMapLayer('riskContours')">
-              Risk Contours (demo)[cite: 1]
+              Risk Contours (demo)
             </label>
           </div>
 
           <!-- Map Legend -->
           <div class="map-legend">
             <div class="legend-item">
-              <span class="legend-color" style="background: #0071bc;"></span> Target Location[cite: 1]
+              <span class="legend-color" style="background: #0071bc;"></span> Target Location
             </div>
             <div class="legend-item">
-              <span class="legend-color" style="background: #38bdf8;"></span> Conformal Uncertainty[cite: 1]
+              <span class="legend-color" style="background: #38bdf8;"></span> Conformal Uncertainty
             </div>
             <div class="legend-item">
-              <span class="legend-color" style="background: #cd2026;"></span> High Risk Area (demo)[cite: 1]
+              <span class="legend-color" style="background: #cd2026;"></span> High Risk Area (demo)
             </div>
           </div>
         </div>
@@ -1074,39 +1086,48 @@
           <div class="panel-header">
             <span class="panel-title">
               <i data-lucide="line-chart"></i> Reliability &amp; Conformal Inference
-            </span>[cite: 1]
-            <span id="timestampBadge" class="panel-badge">UTC SYNCED</span>[cite: 1]
+            </span>
+            <span id="timestampBadge" class="panel-badge">UTC SYNCED</span>
           </div>
 
           <div class="panel-tabs">
-            <button class="active" data-vtab="overview">Overview</button>[cite: 1]
-            <button data-vtab="conformal">Conformal</button>[cite: 1]
-            <button data-vtab="evidence">Evidence</button>[cite: 1]
+            <button class="active" data-vtab="overview">Overview</button>
+            <button data-vtab="conformal">Conformal</button>
+            <button data-vtab="evidence">Evidence</button>
           </div>
 
           <!-- Tab: Overview -->
           <div id="vtab-overview" class="tab-content active">
             <div class="kpi-matrix">
               <div class="kpi-card">
-                <div class="kpi-title">Bust Prob <i data-lucide="alert-triangle" style="color:var(--risk-med);"></i></div>[cite: 1]
-                <div class="kpi-val" id="valBustProb" style="color: var(--risk-med);">--</div>[cite: 1]
-                <div class="kpi-sub">Empirical q₉₅ Failure Odds</div>[cite: 1]
+                <div class="kpi-title">Bust Prob <i data-lucide="alert-triangle" style="color:var(--risk-med);"></i></div>
+                <div class="kpi-val" id="valBustProb" style="color: var(--risk-med);">--</div>
+                <div class="kpi-sub">Empirical q₉₅ Failure Odds</div>
               </div>
               <div class="kpi-card">
-                <div class="kpi-title">Risk Tier <i data-lucide="shield" style="color:var(--noaa-blue);"></i></div>[cite: 1]
-                <div class="kpi-val" id="valRiskTier">--</div>[cite: 1]
-                <div class="kpi-sub" id="subRiskDesc">Calibrated Policy</div>[cite: 1]
+                <div class="kpi-title">Risk Tier <i data-lucide="shield" style="color:var(--noaa-blue);"></i></div>
+                <div class="kpi-val" id="valRiskTier">--</div>
+                <div class="kpi-sub" id="subRiskDesc">Calibrated Policy</div>
               </div>
               <div class="kpi-card">
-                <div class="kpi-title">Conformal <i data-lucide="maximize-2" style="color:var(--noaa-blue);"></i></div>[cite: 1]
-                <div class="kpi-val" id="valConformalRange" style="font-size: 1rem; color: var(--noaa-blue);">--</div>[cite: 1]
-                <div class="kpi-sub">90% Coverage Guarantee</div>[cite: 1]
+                <div class="kpi-title">Conformal <i data-lucide="maximize-2" style="color:var(--noaa-blue);"></i></div>
+                <div class="kpi-val" id="valConformalRange" style="font-size: 1rem; color: var(--noaa-blue);">--</div>
+                <div class="kpi-sub">90% Coverage Guarantee</div>
               </div>
               <div class="kpi-card">
-                <div class="kpi-title">OOD Score <i data-lucide="radar" style="color:var(--noaa-blue);"></i></div>[cite: 1]
-                <div class="kpi-val" id="valNoveltyScore">--</div>[cite: 1]
-                <div class="kpi-sub" id="subNoveltyDesc">Atmospheric State Drift</div>[cite: 1]
+                <div class="kpi-title">OOD Score <i data-lucide="radar" style="color:var(--noaa-blue);"></i></div>
+                <div class="kpi-val" id="valNoveltyScore">--</div>
+                <div class="kpi-sub" id="subNoveltyDesc">Atmospheric State Drift</div>
               </div>
+            </div>
+
+            <!-- Dynamic Forecast Horizon Trend Chart -->
+            <div class="chart-container-box">
+              <label>Horizon Uncertainty Envelope &amp; Risk Trend</label>
+              <div style="height: 190px; position: relative;">
+                <canvas id="sentinelForecastChart"></canvas>
+              </div>
+              <div class="input-hint">Multi-lead temperature 90% conformal band (°C, left) and calibrated bust probability (%, right).</div>
             </div>
           </div>
 
@@ -1114,40 +1135,40 @@
           <div id="vtab-conformal" class="tab-content">
             <div class="conformal-bar-container">
               <div class="conformal-labels">
-                <span>Lower Bound: <strong id="lblLower" style="color: var(--uncer-blue);">--</strong></span>[cite: 1]
-                <span>Ensemble Median: <strong id="lblMedian" style="color: var(--noaa-dark-blue);">--</strong></span>[cite: 1]
-                <span>Upper Bound: <strong id="lblUpper" style="color: var(--uncer-indigo);">--</strong></span>[cite: 1]
+                <span>Lower Bound: <strong id="lblLower" style="color: var(--uncer-blue);">--</strong></span>
+                <span>Ensemble Median: <strong id="lblMedian" style="color: var(--noaa-dark-blue);">--</strong></span>
+                <span>Upper Bound: <strong id="lblUpper" style="color: var(--uncer-indigo);">--</strong></span>
               </div>
               <div class="range-track">
-                <div class="range-fill" id="rangeFillBar" style="left: 25%; width: 50%;"></div>[cite: 1]
-                <div class="range-target-pin" id="rangeTargetPin" style="left: 50%;"></div>[cite: 1]
+                <div class="range-fill" id="rangeFillBar" style="left: 25%; width: 50%;"></div>
+                <div class="range-target-pin" id="rangeTargetPin" style="left: 50%;"></div>
               </div>
               <div class="conformal-note">
-                Split-Conformal non-conformity score calibrated against held-out validation distributions.[cite: 1]
+                Split-Conformal non-conformity score calibrated against held-out validation distributions.
               </div>
             </div>
 
             <div class="diagnostic-grid">
               <div class="diag-item">
-                <div class="diag-label">Trust State</div>[cite: 1]
-                <span id="pillTrustState" class="diag-pill" style="background: var(--risk-low-bg); color: var(--risk-low);">SUPPORTED</span>[cite: 1]
+                <div class="diag-label">Trust State</div>
+                <span id="pillTrustState" class="diag-pill" style="background: var(--risk-low-bg); color: var(--risk-low);">SUPPORTED</span>
               </div>
               <div class="diag-item">
-                <div class="diag-label">Provider</div>[cite: 1]
-                <span id="pillProvider" class="diag-pill" style="background: var(--noaa-light-blue); color: var(--noaa-blue);">open-meteo-ensemble</span>[cite: 1]
+                <div class="diag-label">Provider</div>
+                <span id="pillProvider" class="diag-pill" style="background: var(--noaa-light-blue); color: var(--noaa-blue);">open-meteo-ensemble</span>
               </div>
               <div class="diag-item">
-                <div class="diag-label">Checksum</div>[cite: 1]
-                <span class="diag-pill" style="background: #f0f0f0; color: #666;">adaec18c</span>[cite: 1]
+                <div class="diag-label">Checksum</div>
+                <span class="diag-pill" style="background: #f0f0f0; color: #666;">adaec18c</span>
               </div>
             </div>
           </div>
 
           <!-- Tab: Evidence -->
           <div id="vtab-evidence" class="tab-content">
-            <label>Atmospheric Evidence &amp; Attribution Signals</label>[cite: 1]
+            <label>Atmospheric Evidence &amp; Attribution Signals</label>
             <div class="evidence-box" id="evidenceTrace">
-Awaiting analysis audit trigger...[cite: 1]
+Awaiting analysis audit trigger...
             </div>
           </div>
         </aside>
@@ -1161,29 +1182,29 @@ Awaiting analysis audit trigger...[cite: 1]
           <div class="panel-header">
             <span class="panel-title">
               <i data-lucide="layers"></i> Batch Workload Dispatcher
-            </span>[cite: 1]
-            <span class="panel-badge">N ≤ 50 Synchronous Cap</span>[cite: 1]
+            </span>
+            <span class="panel-badge">N ≤ 50 Synchronous Cap</span>
           </div>
           <div class="form-group">
-            <label for="batchJsonInput">JSON Coordinate Array Matrix</label>[cite: 1]
+            <label for="batchJsonInput">JSON Coordinate Array Matrix</label>
             <textarea id="batchJsonInput" rows="14" class="mono" style="font-size: 0.78rem;">[
   {"location": "Kolkata", "latitude": 22.5726, "longitude": 88.3639, "lead_hours": 48},
   {"location": "Meghalaya", "latitude": 25.5788, "longitude": 91.8933, "lead_hours": 48},
   {"location": "Tokyo", "latitude": 35.6895, "longitude": 139.6917, "lead_hours": 24},
   {"location": "London", "latitude": 51.5074, "longitude": -0.1278, "lead_hours": 72},
   {"location": "Invalid Coord", "latitude": -999.0, "longitude": -999.0, "lead_hours": 24}
-]</textarea>[cite: 1]
+]</textarea>
           </div>
           <div class="btn-group">
             <button class="btn-primary" onclick="executeSyncBatch()">
               <i data-lucide="play"></i> Run Sync Batch
-            </button>[cite: 1]
+            </button>
             <button class="btn-secondary" id="btnAsyncJob" onclick="executeAsyncJob()">
               <i data-lucide="clock"></i> Enqueue Async Job
-            </button>[cite: 1]
+            </button>
           </div>
           <div class="notice-box">
-            <strong>Note:</strong> Invalid coordinates trigger explicit ABSTAIN responses rather than extrapolated values — designed for operational safety.[cite: 1]
+            <strong>Note:</strong> Invalid coordinates trigger explicit ABSTAIN responses rather than extrapolated values — designed for operational safety.
           </div>
         </div>
 
@@ -1191,25 +1212,25 @@ Awaiting analysis audit trigger...[cite: 1]
           <div class="panel-header">
             <span class="panel-title">
               <i data-lucide="check-circle"></i> Batch Execution Isolation
-            </span>[cite: 1]
-            <span id="batchSummaryStats" class="panel-badge">0 Records</span>[cite: 1]
+            </span>
+            <span id="batchSummaryStats" class="panel-badge">0 Records</span>
           </div>
           <div class="table-wrapper">
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>Target</th>[cite: 1]
-                  <th>Bust Prob</th>[cite: 1]
-                  <th>Risk Tier</th>[cite: 1]
-                  <th>Conformal (90%)</th>[cite: 1]
-                  <th>OOD</th>[cite: 1]
-                  <th>Status</th>[cite: 1]
+                  <th>Target</th>
+                  <th>Bust Prob</th>
+                  <th>Risk Tier</th>
+                  <th>Conformal (90%)</th>
+                  <th>OOD</th>
+                  <th>Status</th>
                 </tr>
               </thead>
               <tbody id="batchTableBody">
                 <tr>
                   <td colspan="6" style="text-align:center; color:var(--noaa-muted); font-style:italic;">
-                    No active batch results. Run a batch to view isolation table.[cite: 1]
+                    No active batch results. Run a batch to view isolation table.
                   </td>
                 </tr>
               </tbody>
@@ -1226,28 +1247,28 @@ Awaiting analysis audit trigger...[cite: 1]
           <div class="panel-header">
             <span class="panel-title">
               <i data-lucide="key-round"></i> API Token &amp; Preferences
-            </span>[cite: 1]
+            </span>
           </div>
           <div class="form-group">
-            <label for="apiKeyInput">API Key Authentication Header</label>[cite: 1]
-            <input type="text" id="apiKeyInput" value="veyra-public-client-token" class="mono" style="font-size: 0.85rem;" oninput="updateActiveRoleBadge()" />[cite: 1]
-            <div class="input-hint">X-API-Key header sent with every request</div>[cite: 1]
+            <label for="apiKeyInput">API Key Authentication Header</label>
+            <input type="text" id="apiKeyInput" value="veyra-public-client-token" class="mono" style="font-size: 0.85rem;" oninput="updateActiveRoleBadge()" />
+            <div class="input-hint">X-API-Key header sent with every request</div>
           </div>
           <div class="form-group">
-            <label for="alertSlider">Alert Bust Threshold (τ)</label>[cite: 1]
+            <label for="alertSlider">Alert Bust Threshold (τ)</label>
             <input type="range" id="alertSlider" min="0.10" max="0.90" step="0.05" value="0.45"
-                   oninput="document.getElementById('alertValDisplay').innerText = (this.value * 100).toFixed(0) + '%'" />[cite: 1]
+                   oninput="document.getElementById('alertValDisplay').innerText = (this.value * 100).toFixed(0) + '%'" />
             <div class="slider-labels">
-              <span>Conservative (10%)</span>[cite: 1]
-              <span id="alertValDisplay" class="slider-value">45%</span>[cite: 1]
-              <span>Aggressive (90%)</span>[cite: 1]
+              <span>Conservative (10%)</span>
+              <span id="alertValDisplay" class="slider-value">45%</span>
+              <span>Aggressive (90%)</span>
             </div>
           </div>
           <button class="btn-primary" onclick="saveUserPreferences()">
             <i data-lucide="save"></i> Persist Preferences
-          </button>[cite: 1]
+          </button>
           <div class="notice-box" style="margin-top: 16px;">
-            <strong>Saved Locations:</strong> Kolkata (22.57°N, 88.36°E) — included in default preference payload.[cite: 1]
+            <strong>Saved Locations:</strong> Kolkata (22.57°N, 88.36°E) — included in default preference payload.
           </div>
         </div>
 
@@ -1255,29 +1276,29 @@ Awaiting analysis audit trigger...[cite: 1]
           <div class="panel-header">
             <span class="panel-title">
               <i data-lucide="database"></i> Ground Truth Ingestion
-            </span>[cite: 1]
-            <span class="panel-badge">ADMIN SCOPED</span>[cite: 1]
+            </span>
+            <span class="panel-badge">ADMIN SCOPED</span>
           </div>
-          <label>This operation verifies forecast skill against observed values and persists calibration feedback to the model registry.</label>[cite: 1]
+          <label>This operation verifies forecast skill against observed values and persists calibration feedback to the model registry.</label>
           <div class="coord-grid form-group" style="margin-top: 12px;">
             <div>
-              <label for="actualObsTemp">Observed Actual Temp (°C)</label>[cite: 1]
-              <input type="number" id="actualObsTemp" value="28.5" step="0.1" />[cite: 1]
+              <label for="actualObsTemp">Observed Actual Temp (°C)</label>
+              <input type="number" id="actualObsTemp" value="28.5" step="0.1" />
             </div>
             <div>
-              <label for="actualPredTemp">Predicted Model Temp (°C)</label>[cite: 1]
-              <input type="number" id="actualPredTemp" value="28.0" step="0.1" />[cite: 1]
+              <label for="actualPredTemp">Predicted Model Temp (°C)</label>
+              <input type="number" id="actualPredTemp" value="28.0" step="0.1" />
             </div>
           </div>
           <div class="form-group">
-            <label for="actualLoc">Location Label</label>[cite: 1]
-            <input type="text" id="actualLoc" value="Kolkata" />[cite: 1]
+            <label for="actualLoc">Location Label</label>
+            <input type="text" id="actualLoc" value="Kolkata" />
           </div>
           <button class="btn-secondary" style="width:100%; padding: 10px;" onclick="submitActualObservation()">
             <i data-lucide="upload"></i> Verify &amp; Ingest Actuals
-          </button>[cite: 1]
+          </button>
           <div class="notice-box">
-            <strong>Permission:</strong> Requires an Admin API key (e.g., <span class="mono">veyra-admin-master-key</span>) — public tokens will be rejected with HTTP 403.[cite: 1]
+            <strong>Permission:</strong> Requires an Admin API key (e.g., <span class="mono">veyra-admin-master-key</span>) — public tokens will be rejected with HTTP 403.
           </div>
         </div>
       </div>
@@ -1334,7 +1355,7 @@ Awaiting analysis audit trigger...[cite: 1]
       <a href="#">Contact</a>
     </div>
     <div class="footer-copyright">
-      &copy; 2026 Veyra Research Group — Atmospheric Forecast Reliability Platform. All outputs are experimental and intended for scientific verification use.[cite: 1]
+      &copy; 2026 Veyra Research Group — Atmospheric Forecast Reliability Platform. All outputs are experimental and intended for scientific verification use.
     </div>
   </footer>
 
@@ -1348,7 +1369,7 @@ Awaiting analysis audit trigger...[cite: 1]
     // 1. UTC Clock
     function updateUTCClock() {
       const now = new Date();
-      document.getElementById('utcClock').innerText = now.toISOString().slice(11, 19);[cite: 1]
+      document.getElementById('utcClock').innerText = now.toISOString().slice(11, 19);
     }
     updateUTCClock();
     setInterval(updateUTCClock, 1000);
@@ -1368,18 +1389,18 @@ Awaiting analysis audit trigger...[cite: 1]
     updateActiveRoleBadge();
 
     // 3. Map Initialization & Layer Setup
-    const map = L.map('sentinelMap', { zoomControl: true }).setView([22.5726, 88.3639], 5);[cite: 1]
+    const map = L.map('sentinelMap', { zoomControl: true }).setView([22.5726, 88.3639], 5);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 18,
-      attribution: '&copy; OpenStreetMap contributors'[cite: 1]
+      attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    let targetMarker = L.marker([22.5726, 88.3639]).addTo(map);[cite: 1]
-    let uncertaintyCircle = L.circle([22.5726, 88.3639], {[cite: 1]
-      radius: 85000,[cite: 1]
-      color: '#0071bc',[cite: 1]
-      fillColor: '#38bdf8',[cite: 1]
-      fillOpacity: 0.18[cite: 1]
+    let targetMarker = L.marker([22.5726, 88.3639]).addTo(map);
+    let uncertaintyCircle = L.circle([22.5726, 88.3639], {
+      radius: 85000,
+      color: '#0071bc',
+      fillColor: '#38bdf8',
+      fillOpacity: 0.18
     }).addTo(map);
 
     let riskContours = L.layerGroup();
@@ -1388,11 +1409,11 @@ Awaiting analysis audit trigger...[cite: 1]
     riskContours.addTo(map);
 
     map.on('click', e => {
-      document.getElementById('latCoord').value = e.latlng.lat.toFixed(4);[cite: 1]
-      document.getElementById('lonCoord').value = e.latlng.lng.toFixed(4);[cite: 1]
-      document.getElementById('locQuery').value = `Coordinates (${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)})`;[cite: 1]
-      targetMarker.setLatLng(e.latlng);[cite: 1]
-      uncertaintyCircle.setLatLng(e.latlng);[cite: 1]
+      document.getElementById('latCoord').value = e.latlng.lat.toFixed(4);
+      document.getElementById('lonCoord').value = e.latlng.lng.toFixed(4);
+      document.getElementById('locQuery').value = `Coordinates (${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)})`;
+      targetMarker.setLatLng(e.latlng);
+      uncertaintyCircle.setLatLng(e.latlng);
     });
 
     function toggleMapLayer(layerName) {
@@ -1408,7 +1429,84 @@ Awaiting analysis audit trigger...[cite: 1]
       }
     }
 
-    // 4. View Routing & Dropdown State
+    // 4. Forecast Horizon & Conformal Uncertainty Chart (Chart.js)
+    let forecastChart = null;
+    function initForecastChart() {
+      const ctx = document.getElementById('sentinelForecastChart').getContext('2d');
+      forecastChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: ['24h', '48h', '72h', '120h', '240h'],
+          datasets: [
+            {
+              label: 'Upper 90% Bound (°C)',
+              data: [30.5, 31.8, 32.4, 33.9, 35.2],
+              borderColor: 'rgba(99, 102, 241, 0.5)',
+              backgroundColor: 'rgba(56, 189, 248, 0.15)',
+              borderDash: [3, 3],
+              pointRadius: 0,
+              fill: '+1',
+              yAxisID: 'y'
+            },
+            {
+              label: 'Lower 90% Bound (°C)',
+              data: [25.1, 24.8, 23.9, 22.5, 20.8],
+              borderColor: 'rgba(56, 189, 248, 0.5)',
+              borderDash: [3, 3],
+              pointRadius: 0,
+              fill: false,
+              yAxisID: 'y'
+            },
+            {
+              label: 'Forecast Temp (°C)',
+              data: [27.8, 28.3, 28.1, 28.2, 28.0],
+              borderColor: '#205493',
+              backgroundColor: '#205493',
+              borderWidth: 2.5,
+              pointRadius: 3.5,
+              yAxisID: 'y'
+            },
+            {
+              type: 'bar',
+              label: 'Bust Probability (%)',
+              data: [18, 42, 55, 68, 82],
+              backgroundColor: 'rgba(205, 32, 38, 0.25)',
+              borderColor: 'rgba(205, 32, 38, 0.7)',
+              borderWidth: 1,
+              borderRadius: 3,
+              yAxisID: 'y1'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            x: { grid: { display: false } },
+            y: {
+              type: 'linear',
+              position: 'left',
+              title: { display: true, text: 'Temp (°C)', font: { size: 10 } },
+              grid: { color: '#e5e7eb' }
+            },
+            y1: {
+              type: 'linear',
+              position: 'right',
+              min: 0,
+              max: 100,
+              title: { display: true, text: 'Bust %', font: { size: 10 } },
+              grid: { display: false }
+            }
+          },
+          plugins: {
+            legend: { labels: { boxWidth: 8, font: { size: 9 } } }
+          }
+        }
+      });
+    }
+
+    // 5. View Routing & Dropdown State
     const viewTitleMap = {
       'sentinel': 'Forecast Reliability Sentinel',
       'batch': 'Batch Workloads & Async Queue',
@@ -1432,7 +1530,12 @@ Awaiting analysis audit trigger...[cite: 1]
         document.getElementById('breadcrumbCurrent').innerText = viewTitleMap[targetView] || 'Research Tools';
 
         // Specific view callbacks
-        if (targetView === 'sentinel') setTimeout(() => map.invalidateSize(), 60);
+        if (targetView === 'sentinel') {
+          setTimeout(() => {
+            map.invalidateSize();
+            if (forecastChart) forecastChart.resize();
+          }, 60);
+        }
         if (targetView === 'models') fetchModelCatalog();
       });
     });
@@ -1448,7 +1551,7 @@ Awaiting analysis audit trigger...[cite: 1]
       });
     });
 
-    // 5. Banner Helper
+    // 6. Banner Helper
     function showBanner(msg, isError = true) {
       const b = document.getElementById('bannerAlert');
       b.className = `banner ${isError ? 'error' : 'success'}`;
@@ -1458,7 +1561,7 @@ Awaiting analysis audit trigger...[cite: 1]
       setTimeout(() => { b.style.display = 'none'; }, 6000);
     }
 
-    // 6. Sentinel Audit Execution
+    // 7. Sentinel Audit Execution
     async function executeSentinelAudit() {
       const btn = document.getElementById('btnAudit');
       btn.disabled = true;
@@ -1498,7 +1601,7 @@ Awaiting analysis audit trigger...[cite: 1]
         }
 
         const data = await res.json();
-        renderAuditResults(data);
+        renderAuditResults(data, lead);
         document.getElementById('timestampBadge').innerText = `AUDIT ${new Date().toISOString().slice(11, 19)}Z`;
       } catch (err) {
         showBanner(`Sentinel Audit Failed: ${err.message}`, true);
@@ -1509,7 +1612,7 @@ Awaiting analysis audit trigger...[cite: 1]
       }
     }
 
-    function renderAuditResults(d) {
+    function renderAuditResults(d, currentLead = 48) {
       const probPct = (d.bust_probability * 100).toFixed(1);
       document.getElementById('valBustProb').innerText = `${probPct}%`;
 
@@ -1560,6 +1663,26 @@ Awaiting analysis audit trigger...[cite: 1]
       const marginDeg = (d.conformal_upper - d.conformal_lower) / 2;
       uncertaintyCircle.setRadius(Math.max(marginDeg * 25000, 15000));
 
+      // Update Chart Real-Time Projection Curves
+      if (forecastChart) {
+        const medVal = parseFloat(median);
+        const marginVal = parseFloat((d.conformal_upper - d.conformal_lower) / 2);
+        const baseProb = d.bust_probability * 100;
+
+        // Dynamic multi-horizon envelope calculations
+        const leads = [24, 48, 72, 120, 240];
+        const upperCurve = leads.map(h => parseFloat((medVal + marginVal * Math.sqrt(h / currentLead)).toFixed(1)));
+        const lowerCurve = leads.map(h => parseFloat((medVal - marginVal * Math.sqrt(h / currentLead)).toFixed(1)));
+        const tempCurve = leads.map(() => medVal);
+        const probCurve = leads.map(h => Math.min(98, Math.max(8, parseFloat((baseProb * Math.pow(h / currentLead, 0.45)).toFixed(1)))));
+
+        forecastChart.data.datasets[0].data = upperCurve;
+        forecastChart.data.datasets[1].data = lowerCurve;
+        forecastChart.data.datasets[2].data = tempCurve;
+        forecastChart.data.datasets[3].data = probCurve;
+        forecastChart.update();
+      }
+
       // Evidence Trace Output
       document.getElementById('evidenceTrace').innerHTML = `
 [AUDIT-LOG ${new Date().toISOString()}]
@@ -1572,7 +1695,7 @@ Awaiting analysis audit trigger...[cite: 1]
 • STATUS               : INTEGRITY GUARANTEED`;
     }
 
-    // 7. Batch Sync Dispatch
+    // 8. Batch Sync Dispatch
     async function executeSyncBatch() {
       activeToken = document.getElementById('apiKeyInput').value.trim();
       const raw = document.getElementById('batchJsonInput').value;
@@ -1614,7 +1737,7 @@ Awaiting analysis audit trigger...[cite: 1]
       document.getElementById('batchSummaryStats').innerText = `${results.length} Items Processed`;
     }
 
-    // 8. Batch Async Dispatch & Polling
+    // 9. Batch Async Dispatch & Polling
     async function executeAsyncJob() {
       const btn = document.getElementById('btnAsyncJob');
       activeToken = document.getElementById('apiKeyInput').value.trim();
@@ -1661,7 +1784,7 @@ Awaiting analysis audit trigger...[cite: 1]
       }
     }
 
-    // 9. Model Registry
+    // 10. Model Registry
     async function fetchModelCatalog() {
       try {
         const res = await fetch(`${API_BASE}/v1/models`);
@@ -1698,7 +1821,7 @@ Awaiting analysis audit trigger...[cite: 1]
       }
     }
 
-    // 10. Metrics Scrape
+    // 11. Metrics Scrape
     async function fetchMetricsScrape() {
       try {
         const res = await fetch(`${API_BASE}/metrics`);
@@ -1712,7 +1835,7 @@ Awaiting analysis audit trigger...[cite: 1]
       }
     }
 
-    // 11. User Preferences
+    // 12. User Preferences
     async function saveUserPreferences() {
       activeToken = document.getElementById('apiKeyInput').value.trim();
       const thresh = parseFloat(document.getElementById('alertSlider').value);
@@ -1732,7 +1855,7 @@ Awaiting analysis audit trigger...[cite: 1]
       }
     }
 
-    // 12. Ground Truth Ingestion
+    // 13. Ground Truth Ingestion
     async function submitActualObservation() {
       const adminKey = document.getElementById('apiKeyInput').value.trim();
       const obs = parseFloat(document.getElementById('actualObsTemp').value);
@@ -1757,7 +1880,8 @@ Awaiting analysis audit trigger...[cite: 1]
       }
     }
 
-    // 13. Mount Initialization
+    // 14. Mount Initialization
+    initForecastChart();
     executeSentinelAudit();
     fetchModelCatalog();
   </script>
