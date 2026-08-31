@@ -3,72 +3,90 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Veyra V4.0 — Atmospheric Forecast Reliability Platform</title>
-  
-  <!-- Leaflet & Canvas Map Styles -->
+  <title>VEYRA SENTINEL | Atmospheric Forecast Reliability Platform</title>
+
+  <!-- Leaflet Map -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <!-- Google Fonts & Lucide Icons -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Fonts & Icons -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <style>
     :root {
-      --bg-base: #090d16;
-      --bg-surface: #0f172a;
-      --bg-card: #1e293b;
-      --bg-card-hover: #273549;
-      --border: #334155;
-      --border-subtle: #1e293b;
-      
-      --accent-primary: #38bdf8;
-      --accent-secondary: #6366f1;
-      --accent-gradient: linear-gradient(135deg, #38bdf8 0%, #6366f1 100%);
-      
-      --text-primary: #f8fafc;
-      --text-secondary: #94a3b8;
-      --text-muted: #64748b;
-      
-      --risk-low: #10b981;
-      --risk-low-bg: rgba(16, 185, 129, 0.15);
-      --risk-med: #f59e0b;
-      --risk-med-bg: rgba(245, 158, 11, 0.15);
-      --risk-high: #ef4444;
-      --risk-high-bg: rgba(239, 68, 68, 0.15);
-      --risk-crit: #a855f7;
-      --risk-crit-bg: rgba(168, 85, 247, 0.15);
-      
-      --radius-sm: 6px;
-      --radius-md: 10px;
-      --radius-lg: 16px;
-      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
-      --shadow-glow: 0 0 20px rgba(56, 189, 248, 0.15);
+      --noaa-dark-blue: #1b3a6b;
+      --noaa-blue: #205493;
+      --noaa-light-blue: #dce4ef;
+      --noaa-accent: #0071bc;
+      --noaa-gray-bg: #f5f5f5;
+      --noaa-card-bg: #ffffff;
+      --noaa-border: #c0c0c0;
+      --noaa-border-subtle: #e0e0e0;
+      --noaa-text: #212121;
+      --noaa-muted: #555555;
+      --noaa-white: #ffffff;
+
+      --risk-low: #2e8540;
+      --risk-low-bg: #e6f4e6;
+      --risk-med: #b87a00;
+      --risk-med-bg: #fff3cd;
+      --risk-high: #cd2026;
+      --risk-high-bg: #fde8e8;
+      --risk-crit: #991b1b;
+      --risk-crit-bg: #f5d0d0;
+
+      --uncer-blue: #38bdf8;
+      --uncer-indigo: #6366f1;
+
+      --alert-bg: #fff7e6;
+      --alert-border: #f0ad4e;
+
+      --radius-sm: 4px;
+      --radius-md: 6px;
+      --radius-lg: 10px;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+      --shadow-md: 0 2px 6px rgba(0,0,0,0.08);
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
-      background-color: var(--bg-base);
-      color: var(--text-primary);
-      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--noaa-gray-bg);
+      color: var(--noaa-text);
+      font-family: 'Source Sans 3', -apple-system, BlinkMacSystemFont, sans-serif;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
+      line-height: 1.5;
+      font-size: 16px;
     }
 
-    /* Top Navigation Bar */
-    header {
-      background: rgba(15, 23, 42, 0.8);
-      backdrop-filter: blur(12px);
-      border-bottom: 1px solid var(--border);
+    .mono { font-family: 'JetBrains Mono', monospace; }
+
+    /* ============ Alert Bar ============ */
+    .alert-bar {
+      background-color: var(--alert-bg);
+      border-bottom: 1px solid var(--alert-border);
+      padding: 6px 24px;
+      font-size: 0.85rem;
+      text-align: center;
+      color: #7a5300;
+    }
+
+    /* ============ Agency Banner ============ */
+    .agency-banner {
+      background-color: var(--noaa-dark-blue);
+      color: var(--noaa-white);
       padding: 14px 28px;
-      position: sticky;
-      top: 0;
-      z-index: 1000;
       display: flex;
-      align-items: center;
       justify-content: space-between;
+      align-items: center;
+      border-bottom: 3px solid var(--noaa-accent);
+      flex-wrap: wrap;
+      gap: 10px;
     }
 
     .brand-group {
@@ -77,81 +95,130 @@
       gap: 12px;
     }
 
+    .brand-icon {
+      width: 28px;
+      height: 28px;
+      color: #ffd200;
+    }
+
     .brand-title {
-      font-size: 19px;
-      font-weight: 800;
-      letter-spacing: -0.02em;
-      background: var(--accent-gradient);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      color: var(--noaa-white);
+    }
+
+    .brand-subtitle {
+      font-size: 0.85rem;
+      opacity: 0.9;
+      margin-left: 14px;
+      font-weight: 400;
+      border-left: 1px solid rgba(255,255,255,0.4);
+      padding-left: 14px;
     }
 
     .release-tag {
-      background: rgba(99, 102, 241, 0.15);
-      color: #818cf8;
-      border: 1px solid rgba(99, 102, 241, 0.3);
-      padding: 3px 8px;
+      background: rgba(255, 210, 0, 0.2);
+      color: #ffd200;
+      border: 1px solid rgba(255, 210, 0, 0.4);
+      padding: 2px 8px;
       border-radius: 9999px;
       font-size: 11px;
       font-weight: 700;
       font-family: 'JetBrains Mono', monospace;
     }
 
-    .nav-tabs {
+    .header-status-group {
       display: flex;
-      gap: 6px;
-      background: var(--bg-card);
-      padding: 4px;
-      border-radius: var(--radius-md);
-      border: 1px solid var(--border);
-    }
-
-    .nav-tab {
-      padding: 6px 14px;
-      border-radius: var(--radius-sm);
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text-secondary);
-      border: none;
-      background: transparent;
-      cursor: pointer;
-      display: flex;
+      gap: 10px;
       align-items: center;
-      gap: 8px;
-      transition: all 0.2s;
+      flex-wrap: wrap;
     }
 
-    .nav-tab:hover { color: var(--text-primary); }
-    .nav-tab.active {
-      background: var(--accent-gradient);
-      color: #ffffff;
-      box-shadow: var(--shadow-sm);
-    }
-
-    .auth-status-pill {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      padding: 6px 12px;
+    .status-badge {
+      background-color: rgba(255, 255, 255, 0.12);
+      padding: 5px 14px;
       border-radius: 9999px;
-      font-size: 12px;
-      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      letter-spacing: 0.02em;
     }
 
     .status-dot {
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background: var(--risk-low);
-      box-shadow: 0 0 8px var(--risk-low);
+      background-color: #4caf50;
+      animation: pulse 2s infinite;
     }
 
-    /* Main Container */
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.4; }
+      100% { opacity: 1; }
+    }
+
+    /* ============ Main Navigation ============ */
+    .main-nav {
+      background-color: var(--noaa-blue);
+      display: flex;
+      flex-wrap: wrap;
+      padding: 0 24px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+
+    .nav-tab {
+      color: var(--noaa-white);
+      text-decoration: none;
+      padding: 11px 18px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      transition: background-color 0.2s;
+      font-family: inherit;
+    }
+
+    .nav-tab:hover {
+      background-color: rgba(255,255,255,0.08);
+    }
+
+    .nav-tab.active {
+      background-color: rgba(255,255,255,0.14);
+      border-bottom-color: #ffd200;
+      font-weight: 700;
+    }
+
+    .nav-tab svg {
+      width: 15px;
+      height: 15px;
+    }
+
+    /* ============ Breadcrumb ============ */
+    .breadcrumb {
+      padding: 12px 28px 0;
+      font-size: 0.85rem;
+      color: var(--noaa-muted);
+      max-width: 1540px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* ============ Main Container ============ */
     main {
       flex: 1;
-      padding: 24px 28px;
+      padding: 20px 28px 40px;
       max-width: 1540px;
       margin: 0 auto;
       width: 100%;
@@ -160,71 +227,99 @@
     .tab-view { display: none; }
     .tab-view.active { display: block; }
 
-    /* Layout Grids */
+    /* ============ Layout Grid ============ */
     .sentinel-layout {
       display: grid;
       grid-template-columns: 420px 1fr;
       gap: 24px;
+      align-items: start;
     }
 
     @media (max-width: 1080px) {
       .sentinel-layout { grid-template-columns: 1fr; }
     }
 
+    /* ============ Cards / Panels ============ */
     .panel {
-      background: var(--bg-surface);
-      border: 1px solid var(--border);
+      background: var(--noaa-card-bg);
+      border: 1px solid var(--noaa-border);
       border-radius: var(--radius-lg);
       padding: 22px;
       box-shadow: var(--shadow-md);
+      margin-bottom: 20px;
     }
 
     .panel-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 20px;
+      margin-bottom: 18px;
       padding-bottom: 12px;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 2px solid var(--noaa-light-blue);
+      flex-wrap: wrap;
+      gap: 8px;
     }
 
     .panel-title {
-      font-size: 15px;
+      font-size: 1.05rem;
       font-weight: 700;
-      color: var(--text-primary);
+      color: var(--noaa-dark-blue);
       display: flex;
       align-items: center;
       gap: 8px;
     }
 
-    /* Forms & Inputs */
+    .panel-title svg {
+      width: 16px;
+      height: 16px;
+      color: var(--noaa-blue);
+    }
+
+    .panel-badge {
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--noaa-muted);
+      background: var(--noaa-gray-bg);
+      border: 1px solid var(--noaa-border-subtle);
+      padding: 3px 10px;
+      border-radius: 9999px;
+    }
+
+    /* ============ Forms & Inputs ============ */
     .form-group { margin-bottom: 16px; }
+
     label {
       display: block;
-      font-size: 12px;
+      font-size: 0.8rem;
       font-weight: 600;
-      color: var(--text-secondary);
-      margin-bottom: 6px;
+      color: var(--noaa-muted);
+      margin-bottom: 5px;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.04em;
     }
 
     input, select, textarea {
       width: 100%;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
+      background: var(--noaa-white);
+      border: 1px solid #b0b0b0;
       border-radius: var(--radius-sm);
-      padding: 10px 12px;
-      color: var(--text-primary);
-      font-size: 14px;
+      padding: 9px 12px;
+      color: var(--noaa-text);
+      font-size: 0.95rem;
       font-family: inherit;
       transition: border-color 0.2s;
     }
 
     input:focus, select:focus, textarea:focus {
       outline: none;
-      border-color: var(--accent-primary);
-      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+      border-color: var(--noaa-accent);
+      box-shadow: 0 0 0 2px rgba(0, 113, 188, 0.18);
+    }
+
+    .input-hint {
+      font-size: 0.75rem;
+      color: var(--noaa-muted);
+      margin-top: 3px;
     }
 
     .coord-grid {
@@ -233,127 +328,173 @@
       gap: 12px;
     }
 
+    select {
+      -webkit-appearance: menulist;
+      appearance: menulist;
+    }
+
+    /* ============ Buttons ============ */
     .btn-primary {
       width: 100%;
-      background: var(--accent-gradient);
-      color: #ffffff;
+      background-color: var(--noaa-blue);
+      color: var(--noaa-white);
       border: none;
       border-radius: var(--radius-sm);
-      padding: 12px 18px;
-      font-size: 14px;
+      padding: 11px 18px;
+      font-size: 0.95rem;
       font-weight: 700;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
-      box-shadow: var(--shadow-glow);
-      transition: opacity 0.2s, transform 0.1s;
+      transition: background-color 0.2s;
+      font-family: inherit;
     }
 
-    .btn-primary:hover { opacity: 0.95; }
-    .btn-primary:active { transform: scale(0.99); }
+    .btn-primary:hover { background-color: var(--noaa-dark-blue); }
+    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .btn-primary svg { width: 16px; height: 16px; }
+
     .btn-secondary {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      color: var(--text-primary);
+      background: var(--noaa-white);
+      border: 1px solid var(--noaa-border);
+      color: var(--noaa-blue);
       padding: 8px 14px;
       border-radius: var(--radius-sm);
-      font-size: 13px;
+      font-size: 0.85rem;
       font-weight: 600;
       cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
     }
-    .btn-secondary:hover { background: var(--bg-card-hover); }
 
-    /* Map Box */
+    .btn-secondary:hover {
+      background: var(--noaa-light-blue);
+      border-color: var(--noaa-blue);
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn-group .btn-primary { width: auto; flex: 1; min-width: 160px; }
+    .btn-group .btn-secondary { width: auto; flex: 1; min-width: 160px; }
+
+    /* ============ Map ============ */
     #sentinelMap {
       height: 300px;
       border-radius: var(--radius-md);
-      border: 1px solid var(--border);
+      border: 1px solid var(--noaa-border);
       margin-top: 16px;
-      background: #020617;
+      background: #e8edf2;
     }
 
-    /* KPI Metrics Matrix */
+    .map-caption {
+      margin-top: 6px;
+      font-size: 0.78rem;
+      color: var(--noaa-muted);
+      text-align: center;
+    }
+
+    /* ============ KPI Cards ============ */
     .kpi-matrix {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 14px;
       margin-bottom: 20px;
     }
 
     .kpi-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
+      background: #fafafa;
+      border: 1px solid var(--noaa-border);
       border-radius: var(--radius-md);
       padding: 16px;
       position: relative;
-      overflow: hidden;
     }
 
     .kpi-title {
-      font-size: 11px;
+      font-size: 0.7rem;
       font-weight: 700;
-      color: var(--text-muted);
+      color: var(--noaa-muted);
       text-transform: uppercase;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.04em;
       margin-bottom: 8px;
       display: flex;
       align-items: center;
       justify-content: space-between;
     }
 
+    .kpi-title svg { width: 14px; height: 14px; }
+
     .kpi-val {
-      font-size: 26px;
-      font-weight: 800;
+      font-size: 1.7rem;
+      font-weight: 700;
       font-family: 'JetBrains Mono', monospace;
       letter-spacing: -0.02em;
     }
 
     .kpi-sub {
-      font-size: 12px;
-      color: var(--text-secondary);
+      font-size: 0.78rem;
+      color: var(--noaa-muted);
       margin-top: 4px;
     }
 
-    /* Uncertainty Conformal Range Visualization */
+    /* ============ Conformal Range Track ============ */
     .conformal-bar-container {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
+      background: #fafafa;
+      border: 1px solid var(--noaa-border);
       border-radius: var(--radius-md);
       padding: 18px;
       margin-bottom: 20px;
     }
 
+    .conformal-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      color: var(--noaa-muted);
+      font-weight: 600;
+      margin-bottom: 14px;
+    }
+
     .range-track {
       height: 12px;
-      background: #0f172a;
+      background: #e0e0e0;
       border-radius: 9999px;
       position: relative;
-      margin: 20px 0 10px 0;
-      border: 1px solid var(--border);
+      border: 1px solid #ccc;
     }
 
     .range-fill {
       position: absolute;
       height: 100%;
-      background: linear-gradient(90deg, #38bdf8, #818cf8);
+      background: linear-gradient(90deg, #38bdf8 0%, #6366f1 100%);
       border-radius: 9999px;
-      box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+      opacity: 0.85;
     }
 
     .range-target-pin {
       position: absolute;
-      top: -6px;
+      top: -7px;
       width: 4px;
-      height: 24px;
-      background: #f8fafc;
+      height: 26px;
+      background: var(--noaa-dark-blue);
       border-radius: 2px;
       transform: translateX(-50%);
-      box-shadow: 0 0 6px #ffffff;
     }
 
-    /* Diagnostic Pills & Proof Badges */
+    .conformal-note {
+      font-size: 0.75rem;
+      color: var(--noaa-muted);
+      text-align: center;
+      margin-top: 12px;
+    }
+
+    /* ============ Diagnostic Pills ============ */
     .diagnostic-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -362,159 +503,356 @@
     }
 
     .diag-item {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
+      background: #fafafa;
+      border: 1px solid var(--noaa-border-subtle);
       border-radius: var(--radius-md);
-      padding: 12px;
+      padding: 10px 12px;
     }
 
     .diag-label {
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-bottom: 4px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--noaa-muted);
+      margin-bottom: 5px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
     }
 
     .diag-pill {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 3px 8px;
-      border-radius: 6px;
-      font-size: 12px;
+      gap: 5px;
+      padding: 3px 9px;
+      border-radius: var(--radius-sm);
+      font-size: 0.78rem;
       font-weight: 700;
       font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 0.01em;
     }
 
-    /* Evidence Log */
+    /* ============ Evidence Box ============ */
     .evidence-box {
-      background: #090e1a;
-      border: 1px solid var(--border);
+      background: #f8f9fb;
+      border: 1px solid var(--noaa-border);
       border-radius: var(--radius-md);
       padding: 14px;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
+      font-size: 0.78rem;
       line-height: 1.6;
-      color: #cbd5e1;
-      max-height: 160px;
+      color: #333;
+      max-height: 170px;
       overflow-y: auto;
+      white-space: pre-wrap;
     }
 
-    /* Error / Alert Banners */
-    .banner {
-      padding: 12px 16px;
+    /* ============ Tables ============ */
+    .table-wrapper {
+      overflow-x: auto;
+      border: 1px solid var(--noaa-border-subtle);
       border-radius: var(--radius-md);
-      margin-bottom: 20px;
-      display: none;
-      align-items: center;
-      gap: 10px;
-      font-size: 13px;
     }
-    .banner.error { background: #450a0a; border: 1px solid #991b1b; color: #fca5a5; }
-    .banner.success { background: #064e3b; border: 1px solid #065f46; color: #a7f3d0; }
 
-    /* Tables */
     .data-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 13px;
+      font-size: 0.85rem;
+      min-width: 600px;
     }
+
     .data-table th {
       text-align: left;
       padding: 10px 12px;
-      background: var(--bg-card);
-      color: var(--text-muted);
-      font-size: 11px;
+      background: var(--noaa-light-blue);
+      color: var(--noaa-dark-blue);
+      font-size: 0.72rem;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
-      border-bottom: 1px solid var(--border);
+      letter-spacing: 0.04em;
+      border-bottom: 2px solid var(--noaa-border);
+      font-weight: 700;
     }
-    .data-table td {
-      padding: 10px 12px;
-      border-bottom: 1px solid var(--border-subtle);
-      font-family: 'JetBrains Mono', monospace;
-    }
-    .data-table tr:hover { background: rgba(255, 255, 255, 0.02); }
 
-    /* Telemetry Code Blocks */
+    .data-table td {
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--noaa-border-subtle);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.82rem;
+      color: #333;
+    }
+
+    .data-table tr:hover { background: #f5f8fc; }
+    .data-table tr:last-child td { border-bottom: none; }
+
+    /* ============ Banner ============ */
+    .banner {
+      padding: 12px 16px;
+      border-radius: var(--radius-md);
+      margin-bottom: 18px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.88rem;
+      font-weight: 600;
+    }
+    .banner.error {
+      background: #fde8e8;
+      border: 1px solid #f5c6c6;
+      color: #991b1b;
+      display: flex;
+    }
+    .banner.success {
+      background: #e6f4e6;
+      border: 1px solid #b8d9b8;
+      color: #1a5e2a;
+      display: flex;
+    }
+    .banner svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+    /* ============ Telemetry Code Block ============ */
     .telemetry-code {
-      background: #030712;
-      border: 1px solid var(--border);
+      background: #f8f9fb;
+      border: 1px solid var(--noaa-border);
       border-radius: var(--radius-md);
       padding: 16px;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
-      color: #38bdf8;
-      max-height: 380px;
+      font-size: 0.78rem;
+      color: #205493;
+      max-height: 400px;
       overflow-y: auto;
       white-space: pre-wrap;
+      line-height: 1.55;
+    }
+
+    /* ============ Model Registry Cards ============ */
+    .model-card {
+      background: #fafafa;
+      border: 1px solid var(--noaa-border);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      margin-bottom: 10px;
+    }
+
+    .model-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .model-card-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--noaa-dark-blue);
+    }
+
+    .model-card-meta {
+      font-size: 0.78rem;
+      color: var(--noaa-muted);
+      margin-bottom: 4px;
+    }
+
+    .model-card-checksum {
+      font-size: 0.72rem;
+      font-family: 'JetBrains Mono', monospace;
+      color: #888;
+    }
+
+    .model-card-metrics {
+      display: flex;
+      gap: 16px;
+      margin-top: 8px;
+      font-size: 0.8rem;
+    }
+
+    /* ============ Slider ============ */
+    input[type="range"] {
+      width: 100%;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 8px;
+      background: #d0d0d0;
+      border-radius: 9999px;
+      outline: none;
+      border: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--noaa-blue);
+      cursor: pointer;
+      border: 3px solid var(--noaa-white);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--noaa-blue);
+      cursor: pointer;
+      border: 3px solid var(--noaa-white);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+    }
+
+    .slider-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      color: var(--noaa-muted);
+      margin-top: 6px;
+    }
+
+    .slider-value {
+      color: var(--noaa-blue);
+      font-weight: 700;
+    }
+
+    /* ============ Data Source Note ============ */
+    .notice-box {
+      background-color: #fff3cd;
+      border-left: 4px solid #fdb81b;
+      padding: 12px 15px;
+      font-size: 0.85rem;
+      margin-top: 15px;
+      border-radius: var(--radius-sm);
+      color: #6b5500;
+    }
+
+    .notice-box strong { color: #4a3a00; }
+
+    /* ============ Footer ============ */
+    footer {
+      background-color: var(--noaa-dark-blue);
+      color: var(--noaa-white);
+      padding: 20px 28px;
+      text-align: center;
+      font-size: 0.82rem;
+      margin-top: 40px;
+    }
+
+    footer .footer-links {
+      margin-bottom: 8px;
+    }
+
+    footer .footer-links a {
+      color: #aac9e8;
+      text-decoration: none;
+      margin: 0 10px;
+    }
+
+    footer .footer-links a:hover { text-decoration: underline; }
+
+    .footer-copyright {
+      opacity: 0.75;
+      font-size: 0.78rem;
+    }
+
+    /* ============ Responsive ============ */
+    @media (max-width: 768px) {
+      main { padding: 12px 14px 30px; }
+      .agency-banner { padding: 10px 14px; }
+      .main-nav { padding: 0 8px; overflow-x: auto; }
+      .nav-tab { padding: 9px 12px; font-size: 0.8rem; white-space: nowrap; }
+      .panel { padding: 16px; }
+      .kpi-matrix { grid-template-columns: 1fr 1fr; }
+      .diagnostic-grid { grid-template-columns: 1fr; }
+      .brand-subtitle { display: none; }
     }
   </style>
 </head>
 <body>
 
-  <!-- Top Navigation Header -->
-  <header>
+  <!-- ============ Alert Bar ============ -->
+  <div class="alert-bar">
+    <strong>EXPERIMENTAL SYSTEM:</strong> Veyra Sentinel outputs are intended for research and forecast verification use only — not for operational decision-making.
+  </div>
+
+  <!-- ============ Agency Banner ============ -->
+  <header class="agency-banner">
     <div class="brand-group">
-      <i data-lucide="shield-alert" style="color: var(--accent-primary); width: 22px; height: 22px;"></i>
+      <i data-lucide="shield-alert" class="brand-icon"></i>
       <span class="brand-title">VEYRA SENTINEL</span>
+      <span class="brand-subtitle">Atmospheric Forecast Reliability Platform</span>
       <span class="release-tag">v4.0.0-rc1</span>
     </div>
 
-    <nav class="nav-tabs">
-      <button class="nav-tab active" onclick="switchTab('sentinel')">
-        <i data-lucide="activity" style="width: 15px; height: 15px;"></i> Forecast Sentinel
-      </button>
-      <button class="nav-tab" onclick="switchTab('batch')">
-        <i data-lucide="layers" style="width: 15px; height: 15px;"></i> Batch & Async Jobs
-      </button>
-      <button class="nav-tab" onclick="switchTab('accounts')">
-        <i data-lucide="sliders" style="width: 15px; height: 15px;"></i> Alerts & Preferences
-      </button>
-      <button class="nav-tab" onclick="switchTab('models')">
-        <i data-lucide="cpu" style="width: 15px; height: 15px;"></i> Registry & Observability
-      </button>
-    </nav>
-
-    <div class="auth-status-pill">
-      <div class="status-dot"></div>
-      <span id="gatewayStatus">GATEWAY LIVE</span>
-      <span style="color: var(--text-muted);">|</span>
-      <span id="activeTokenRole" style="color: var(--accent-primary);">ROLE: USER</span>
+    <div class="header-status-group">
+      <span class="status-badge">
+        <span class="status-dot"></span>
+        <span id="gatewayStatus">GATEWAY LIVE</span>
+      </span>
+      <span class="status-badge">
+        <span style="color:#ffd200; font-weight:700;">|</span>
+        <span id="activeTokenRole" style="color:#aac9e8;">ROLE: USER</span>
+      </span>
+      <span class="status-badge">
+        <span>UTC:</span> <span id="utcClock" class="mono">--:--:--</span>
+      </span>
     </div>
   </header>
 
-  <!-- Main View Router -->
+  <!-- ============ Main Navigation ============ -->
+  <nav class="main-nav" id="mainNav">
+    <button class="nav-tab active" data-tab="sentinel">
+      <i data-lucide="activity"></i> Forecast Sentinel
+    </button>
+    <button class="nav-tab" data-tab="batch">
+      <i data-lucide="layers"></i> Batch &amp; Async Jobs
+    </button>
+    <button class="nav-tab" data-tab="accounts">
+      <i data-lucide="sliders-horizontal"></i> Alerts &amp; Preferences
+    </button>
+    <button class="nav-tab" data-tab="models">
+      <i data-lucide="cpu"></i> Registry &amp; Observability
+    </button>
+  </nav>
+
+  <!-- ============ Breadcrumb ============ -->
+  <div class="breadcrumb">
+    <span>Home</span> &gt; <span>Veyra Research Tools</span> &gt; <strong>Forecast Reliability Sentinel</strong>
+  </div>
+
+  <!-- ============ Main Content ============ -->
   <main>
     <div id="bannerAlert" class="banner"></div>
 
-    <!-- TAB 1: Real-Time Forecast Reliability Sentinel -->
+    <!-- ======================================== -->
+    <!-- TAB 1: REAL-TIME FORECAST RELIABILITY    -->
+    <!-- ======================================== -->
     <section id="tab-sentinel" class="tab-view active">
       <div class="sentinel-layout">
-        <!-- Target Parameter Ingestion -->
+
+        <!-- LEFT: Target Input Panel -->
         <div class="panel">
           <div class="panel-header">
-            <span class="panel-title"><i data-lucide="crosshair" style="width: 16px;"></i> Atmospheric Target</span>
-            <span style="font-size: 12px; color: var(--text-muted);">Issue-Time Safe</span>
+            <span class="panel-title">
+              <i data-lucide="crosshair"></i> Atmospheric Target
+            </span>
+            <span class="panel-badge">Issue-Time Safe</span>
           </div>
 
           <div class="form-group">
-            <label>Location Query / Alias</label>
-            <input type="text" id="locQuery" value="Kolkata" placeholder="e.g. Salt Lake Kolkata, Meghalaya, London" />
+            <label for="locQuery">Location Query / Alias</label>
+            <input type="text" id="locQuery" value="Kolkata" placeholder="e.g. Salt Lake Kolkata, Meghalaya, London" autocomplete="off" />
+            <div class="input-hint">Auto-geocodes via Open-Meteo geocoding API</div>
           </div>
 
           <div class="coord-grid form-group">
             <div>
-              <label>Latitude</label>
+              <label for="latCoord">Latitude</label>
               <input type="number" id="latCoord" value="22.5726" step="0.0001" />
             </div>
             <div>
-              <label>Longitude</label>
+              <label for="lonCoord">Longitude</label>
               <input type="number" id="lonCoord" value="88.3639" step="0.0001" />
             </div>
           </div>
 
           <div class="form-group">
-            <label>Forecast Lead Horizon</label>
+            <label for="leadHorizon">Forecast Lead Horizon</label>
             <select id="leadHorizon">
               <option value="24">24 Hours (Day 1 Operational)</option>
               <option value="48" selected>48 Hours (Day 2 Synoptic)</option>
@@ -525,58 +863,61 @@
           </div>
 
           <button class="btn-primary" id="btnAudit" onclick="executeSentinelAudit()">
-            <i data-lucide="zap" style="width: 16px;"></i> Audit Numerical Reliability
+            <i data-lucide="zap"></i> Audit Numerical Reliability
           </button>
 
           <div id="sentinelMap"></div>
+          <div class="map-caption">Click map to set evaluation point</div>
         </div>
 
-        <!-- Real-Time Statistical Audit Output -->
+        <!-- RIGHT: Statistical Audit Output -->
         <div class="panel">
           <div class="panel-header">
-            <span class="panel-title"><i data-lucide="line-chart" style="width: 16px;"></i> Reliability & Conformal Inference</span>
-            <span id="timestampBadge" style="font-size: 12px; font-family: 'JetBrains Mono', monospace; color: var(--text-muted);">UTC SYNCED</span>
+            <span class="panel-title">
+              <i data-lucide="line-chart"></i> Reliability &amp; Conformal Inference
+            </span>
+            <span id="timestampBadge" class="panel-badge">UTC SYNCED</span>
           </div>
 
-          <!-- 4 Core Matrix Cards -->
+          <!-- 4 Core KPI Cards -->
           <div class="kpi-matrix">
             <div class="kpi-card">
-              <div class="kpi-title">Bust Probability <i data-lucide="alert-triangle" style="width: 14px;"></i></div>
+              <div class="kpi-title">Bust Probability <i data-lucide="alert-triangle" style="color:var(--risk-med);"></i></div>
               <div class="kpi-val" id="valBustProb" style="color: var(--risk-med);">--</div>
-              <div class="kpi-sub">Empirical $q_{95}$ Failure Odds</div>
+              <div class="kpi-sub">Empirical q₉₅ Failure Odds</div>
             </div>
 
             <div class="kpi-card">
-              <div class="kpi-title">Risk Tier <i data-lucide="shield" style="width: 14px;"></i></div>
+              <div class="kpi-title">Risk Tier <i data-lucide="shield" style="color:var(--noaa-blue);"></i></div>
               <div class="kpi-val" id="valRiskTier">--</div>
               <div class="kpi-sub" id="subRiskDesc">Calibrated Policy</div>
             </div>
 
             <div class="kpi-card">
-              <div class="kpi-title">Conformal Interval <i data-lucide="maximize-2" style="width: 14px;"></i></div>
-              <div class="kpi-val" id="valConformalRange" style="font-size: 19px; color: var(--accent-primary);">--</div>
+              <div class="kpi-title">Conformal Interval <i data-lucide="maximize-2" style="color:var(--noaa-blue);"></i></div>
+              <div class="kpi-val" id="valConformalRange" style="font-size: 1.1rem; color: var(--noaa-blue);">--</div>
               <div class="kpi-sub">90% Coverage Guarantee</div>
             </div>
 
             <div class="kpi-card">
-              <div class="kpi-title">OOD Mahalanobis <i data-lucide="radar" style="width: 14px;"></i></div>
+              <div class="kpi-title">OOD Mahalanobis <i data-lucide="radar" style="color:var(--noaa-blue);"></i></div>
               <div class="kpi-val" id="valNoveltyScore">--</div>
               <div class="kpi-sub" id="subNoveltyDesc">Atmospheric State Drift</div>
             </div>
           </div>
 
-          <!-- Conformal Dynamic Margin Track -->
+          <!-- Conformal Range Visualization -->
           <div class="conformal-bar-container">
-            <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-secondary); font-weight:600;">
-              <span>Lower Bound: <strong id="lblLower" style="color: #38bdf8;">--</strong></span>
-              <span>Ensemble Median: <strong id="lblMedian" style="color: #ffffff;">--</strong></span>
-              <span>Upper Bound: <strong id="lblUpper" style="color: #818cf8;">--</strong></span>
+            <div class="conformal-labels">
+              <span>Lower Bound: <strong id="lblLower" style="color: var(--uncer-blue);">--</strong></span>
+              <span>Ensemble Median: <strong id="lblMedian" style="color: var(--noaa-dark-blue);">--</strong></span>
+              <span>Upper Bound: <strong id="lblUpper" style="color: var(--uncer-indigo);">--</strong></span>
             </div>
             <div class="range-track">
               <div class="range-fill" id="rangeFillBar" style="left: 20%; width: 60%;"></div>
               <div class="range-target-pin" id="rangeTargetPin" style="left: 50%;"></div>
             </div>
-            <div style="font-size: 11px; color: var(--text-muted); text-align: center;">
+            <div class="conformal-note">
               Split-Conformal non-conformity score calibrated against held-out validation distributions.
             </div>
           </div>
@@ -589,34 +930,38 @@
             </div>
             <div class="diag-item">
               <div class="diag-label">Provider Provenance</div>
-              <span id="pillProvider" class="diag-pill" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;">open-meteo-ensemble</span>
+              <span id="pillProvider" class="diag-pill" style="background: var(--noaa-light-blue); color: var(--noaa-blue);">open-meteo-ensemble</span>
             </div>
             <div class="diag-item">
               <div class="diag-label">Active ML Checksum</div>
-              <span class="diag-pill" style="background: rgba(148, 163, 184, 0.15); color: #cbd5e1;">adaec18c (v2.1.0)</span>
+              <span class="diag-pill" style="background: #f0f0f0; color: #666;">adaec18c (v2.1.0)</span>
             </div>
           </div>
 
           <!-- Evidence Attribution Trace -->
-          <label>Atmospheric Evidence & Attribution Signals</label>
+          <label>Atmospheric Evidence &amp; Attribution Signals</label>
           <div class="evidence-box" id="evidenceTrace">
-            Awaiting analysis audit trigger...
+Awaiting analysis audit trigger...
           </div>
         </div>
       </div>
     </section>
 
-    <!-- TAB 2: Batch & Asynchronous Workload Queue -->
+    <!-- ======================================== -->
+    <!-- TAB 2: BATCH & ASYNC JOBS               -->
+    <!-- ======================================== -->
     <section id="tab-batch" class="tab-view">
       <div class="sentinel-layout">
         <div class="panel">
           <div class="panel-header">
-            <span class="panel-title"><i data-lucide="layers" style="width: 16px;"></i> Batch Workload Dispatcher</span>
-            <span style="font-size: 12px; color: var(--text-muted);">$N \le 50$ Synchronous Cap</span>
+            <span class="panel-title">
+              <i data-lucide="layers"></i> Batch Workload Dispatcher
+            </span>
+            <span class="panel-badge">N ≤ 50 Synchronous Cap</span>
           </div>
           <div class="form-group">
-            <label>JSON Coordinate Array Matrix</label>
-            <textarea id="batchJsonInput" rows="12" style="font-family:'JetBrains Mono',monospace; font-size:12px;">[
+            <label for="batchJsonInput">JSON Coordinate Array Matrix</label>
+            <textarea id="batchJsonInput" rows="14" class="mono" style="font-size: 0.78rem;">[
   {"location": "Kolkata", "latitude": 22.5726, "longitude": 88.3639, "lead_hours": 48},
   {"location": "Meghalaya", "latitude": 25.5788, "longitude": 91.8933, "lead_hours": 48},
   {"location": "Tokyo", "latitude": 35.6895, "longitude": 139.6917, "lead_hours": 24},
@@ -624,18 +969,27 @@
   {"location": "Invalid Coord", "latitude": -999.0, "longitude": -999.0, "lead_hours": 24}
 ]</textarea>
           </div>
-          <div style="display:flex; gap:10px;">
-            <button class="btn-primary" onclick="executeSyncBatch()">Run Sync Batch</button>
-            <button class="btn-secondary" onclick="executeAsyncJob()">Enqueue Async Job</button>
+          <div class="btn-group">
+            <button class="btn-primary" onclick="executeSyncBatch()">
+              <i data-lucide="play"></i> Run Sync Batch
+            </button>
+            <button class="btn-secondary" onclick="executeAsyncJob()">
+              <i data-lucide="clock"></i> Enqueue Async Job
+            </button>
+          </div>
+          <div class="notice-box">
+            <strong>Note:</strong> Invalid coordinates trigger explicit ABSTAIN responses rather than extrapolated values — designed for operational safety.
           </div>
         </div>
 
         <div class="panel">
           <div class="panel-header">
-            <span class="panel-title"><i data-lucide="check-circle" style="width: 16px;"></i> Batch Execution Isolation</span>
-            <span id="batchSummaryStats" style="font-size: 12px; color: var(--text-muted);">0 Records</span>
+            <span class="panel-title">
+              <i data-lucide="check-circle"></i> Batch Execution Isolation
+            </span>
+            <span id="batchSummaryStats" class="panel-badge">0 Records</span>
           </div>
-          <div style="overflow-x: auto;">
+          <div class="table-wrapper">
             <table class="data-table">
               <thead>
                 <tr>
@@ -648,7 +1002,11 @@
                 </tr>
               </thead>
               <tbody id="batchTableBody">
-                <tr><td colspan="6" style="text-align:center; color:var(--text-muted);">No active batch results.</td></tr>
+                <tr>
+                  <td colspan="6" style="text-align:center; color:var(--noaa-muted); font-style:italic;">
+                    No active batch results. Run a batch to view isolation table.
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -656,118 +1014,200 @@
       </div>
     </section>
 
-    <!-- TAB 3: User Alerts, Preferences & Ground Truth Ingestion -->
+    <!-- ======================================== -->
+    <!-- TAB 3: ALERTS & PREFERENCES              -->
+    <!-- ======================================== -->
     <section id="tab-accounts" class="tab-view">
       <div class="sentinel-layout">
         <div class="panel">
           <div class="panel-header">
-            <span class="panel-title"><i data-lucide="key" style="width: 16px;"></i> API Token & Preferences</span>
+            <span class="panel-title">
+              <i data-lucide="key-round"></i> API Token &amp; Preferences
+            </span>
           </div>
           <div class="form-group">
-            <label>API Key Authentication Header</label>
-            <input type="text" id="apiKeyInput" value="veyra-public-client-token" />
+            <label for="apiKeyInput">API Key Authentication Header</label>
+            <input type="text" id="apiKeyInput" value="veyra-public-client-token" class="mono" style="font-size: 0.85rem;" />
+            <div class="input-hint">X-API-Key header sent with every request</div>
           </div>
           <div class="form-group">
-            <label>Alert Bust Threshold ($\tau$)</label>
-            <input type="range" id="alertSlider" min="0.10" max="0.90" step="0.05" value="0.45" oninput="document.getElementById('alertValDisplay').innerText = (this.value * 100) + '%'" />
-            <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-muted); margin-top:4px;">
+            <label for="alertSlider">Alert Bust Threshold (τ)</label>
+            <input type="range" id="alertSlider" min="0.10" max="0.90" step="0.05" value="0.45"
+                   oninput="document.getElementById('alertValDisplay').innerText = (this.value * 100).toFixed(0) + '%'" />
+            <div class="slider-labels">
               <span>Conservative (10%)</span>
-              <span id="alertValDisplay" style="color:var(--accent-primary); font-weight:700;">45%</span>
+              <span id="alertValDisplay" class="slider-value">45%</span>
               <span>Aggressive (90%)</span>
             </div>
           </div>
-          <button class="btn-primary" onclick="saveUserPreferences()">Persist Preferences</button>
+          <button class="btn-primary" onclick="saveUserPreferences()">
+            <i data-lucide="save"></i> Persist Preferences
+          </button>
+          <div class="notice-box" style="margin-top: 16px;">
+            <strong>Saved Locations:</strong> Kolkata (22.57°N, 88.36°E) — included in default preference payload.
+          </div>
         </div>
 
         <div class="panel">
           <div class="panel-header">
-            <span class="panel-title"><i data-lucide="database" style="width: 16px;"></i> Ground Truth Ingestion (Admin Scoped)</span>
+            <span class="panel-title">
+              <i data-lucide="database"></i> Ground Truth Ingestion
+            </span>
+            <span class="panel-badge">ADMIN SCOPED</span>
           </div>
-          <div class="coord-grid form-group">
+          <label>This operation verifies forecast skill against observed values and persists calibration feedback to the model registry.</label>
+          <div class="coord-grid form-group" style="margin-top: 12px;">
             <div>
-              <label>Observed Actual Temp (°C)</label>
+              <label for="actualObsTemp">Observed Actual Temp (°C)</label>
               <input type="number" id="actualObsTemp" value="28.5" step="0.1" />
             </div>
             <div>
-              <label>Predicted Model Temp (°C)</label>
+              <label for="actualPredTemp">Predicted Model Temp (°C)</label>
               <input type="number" id="actualPredTemp" value="28.0" step="0.1" />
             </div>
           </div>
           <div class="form-group">
-            <label>Location Label</label>
+            <label for="actualLoc">Location Label</label>
             <input type="text" id="actualLoc" value="Kolkata" />
           </div>
-          <button class="btn-secondary" style="width:100%;" onclick="submitActualObservation()">Verify & Ingest Actuals</button>
+          <button class="btn-secondary" style="width:100%; padding: 10px;" onclick="submitActualObservation()">
+            <i data-lucide="upload"></i> Verify &amp; Ingest Actuals
+          </button>
+          <div class="notice-box">
+            <strong>Permission:</strong> Requires an Admin API key (e.g., <span class="mono">veyra-admin-master-key</span>) — public tokens will be rejected with HTTP 403.
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- TAB 4: Model Registry & Live Telemetry -->
+    <!-- ======================================== -->
+    <!-- TAB 4: MODEL REGISTRY & OBSERVABILITY    -->
+    <!-- ======================================== -->
     <section id="tab-models" class="tab-view">
       <div class="sentinel-layout">
         <div class="panel">
           <div class="panel-header">
-            <span class="panel-title"><i data-lucide="cpu" style="width: 16px;"></i> Model Registry Catalog</span>
-            <button class="btn-secondary" onclick="fetchModelCatalog()">Refresh Catalog</button>
+            <span class="panel-title">
+              <i data-lucide="cpu"></i> Model Registry Catalog
+            </span>
+            <button class="btn-secondary" onclick="fetchModelCatalog()">
+              <i data-lucide="refresh-cw" style="width:13px; height:13px;"></i> Refresh
+            </button>
           </div>
-          <div id="modelRegistryList" style="display:flex; flex-direction:column; gap:12px;">
-            <!-- Rendered dynamically -->
+          <div id="modelRegistryList" style="display:flex; flex-direction:column; gap:10px;">
+            <div class="model-card">
+              <div class="model-card-header">
+                <span class="model-card-title">Loading registry…</span>
+              </div>
+              <div class="model-card-meta">Fetching models from Veyra API</div>
+            </div>
           </div>
         </div>
 
         <div class="panel">
           <div class="panel-header">
-            <span class="panel-title"><i data-lucide="activity" style="width: 16px;"></i> Prometheus Live Telemetry Scraper</span>
-            <button class="btn-secondary" onclick="fetchMetricsScrape()">Scrape /metrics</button>
+            <span class="panel-title">
+              <i data-lucide="activity"></i> Prometheus Live Telemetry
+            </span>
+            <button class="btn-secondary" onclick="fetchMetricsScrape()">
+              <i data-lucide="refresh-cw" style="width:13px; height:13px;"></i> Scrape
+            </button>
           </div>
+          <label>Raw /metrics Endpoint</label>
           <div class="telemetry-code" id="metricsScrapeBox">
-            Click 'Scrape /metrics' to fetch raw Prometheus runtime telemetry...
+# Click 'Scrape' to fetch raw Prometheus runtime telemetry...
+# Expected endpoint: GET /metrics
+# Format: text/plain; version=0.0.4
           </div>
         </div>
       </div>
     </section>
   </main>
 
-  <!-- Leaflet Scripts -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- ============ Footer ============ -->
+  <footer>
+    <div class="footer-links">
+      <a href="#">About Veyra</a>
+      <a href="#">Data Providers</a>
+      <a href="#">Publications</a>
+      <a href="#">Contact</a>
+      <a href="#">Accessibility</a>
+    </div>
+    <div class="footer-copyright">
+      &copy; 2026 Veyra Research Group — Atmospheric Forecast Reliability Platform. All outputs are experimental and intended for scientific verification use.
+    </div>
+  </footer>
+
+  <!-- ============ Integrated Engine ============ -->
   <script>
     lucide.createIcons();
 
     const API_BASE = "https://veyra-v1-0.onrender.com";
     let activeToken = "veyra-public-client-token";
 
-    // Setup Leaflet Map
-    const map = L.map('sentinelMap', { zoomControl: false }).setView([22.5726, 88.3639], 5);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 18 }).addTo(map);
+    // ==================== UTC Clock ====================
+    function updateUTCClock() {
+      const now = new Date();
+      document.getElementById('utcClock').innerText =
+        now.toISOString().slice(11, 19);
+    }
+    updateUTCClock();
+    setInterval(updateUTCClock, 1000);
+
+    // ==================== Map Initialization ====================
+    const map = L.map('sentinelMap', { zoomControl: true }).setView([22.5726, 88.3639], 5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
     let targetMarker = L.marker([22.5726, 88.3639]).addTo(map);
-    let uncertaintyCircle = L.circle([22.5726, 88.3639], { radius: 85000, color: '#38bdf8', fillOpacity: 0.15 }).addTo(map);
+    let uncertaintyCircle = L.circle([22.5726, 88.3639], {
+      radius: 85000,
+      color: '#0071bc',
+      fillColor: '#38bdf8',
+      fillOpacity: 0.18
+    }).addTo(map);
 
     map.on('click', e => {
       document.getElementById('latCoord').value = e.latlng.lat.toFixed(4);
       document.getElementById('lonCoord').value = e.latlng.lng.toFixed(4);
+      document.getElementById('locQuery').value = `Coordinates (${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)})`;
       targetMarker.setLatLng(e.latlng);
       uncertaintyCircle.setLatLng(e.latlng);
     });
 
+    // ==================== Tab Switching ====================
+    document.querySelectorAll('.nav-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const tabId = tab.dataset.tab;
+        document.querySelectorAll('.tab-view').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
+        document.getElementById(`tab-${tabId}`).classList.add('active');
+        tab.classList.add('active');
+
+        // Re-trigger map sizing if Sentinel tab is shown
+        if (tabId === 'sentinel') setTimeout(() => map.invalidateSize(), 50);
+        // Auto-load catalog when Models tab is opened
+        if (tabId === 'models') fetchModelCatalog();
+      });
+    });
+
+    // ==================== Banner / Alert ====================
     function showBanner(msg, isError = true) {
       const b = document.getElementById('bannerAlert');
       b.className = `banner ${isError ? 'error' : 'success'}`;
       b.style.display = 'flex';
-      b.innerHTML = `<i data-lucide="${isError ? 'alert-octagon' : 'check-circle'}" style="width:16px;"></i> ${msg}`;
+      b.innerHTML = `<i data-lucide="${isError ? 'alert-octagon' : 'check-circle'}" style="width:16px; height:16px;"></i> ${msg}`;
       lucide.createIcons();
       setTimeout(() => { b.style.display = 'none'; }, 6000);
     }
 
-    function switchTab(tabId) {
-      document.querySelectorAll('.tab-view').forEach(el => el.classList.remove('active'));
-      document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
-      document.getElementById(`tab-${tabId}`).classList.add('active');
-      event.currentTarget.classList.add('active');
-      if (tabId === 'sentinel') map.invalidateSize();
-      if (tabId === 'models') fetchModelCatalog();
-    }
-
+    // ==================== Sentinel Audit ====================
     async function executeSentinelAudit() {
+      const btn = document.getElementById('btnAudit');
+      btn.disabled = true;
+      btn.innerHTML = '<i data-lucide="loader" style="width:16px; animation:spin 1s linear infinite;"></i> Analyzing Reliability...';
+
       const loc = document.getElementById('locQuery').value.trim();
       let lat = parseFloat(document.getElementById('latCoord').value);
       let lon = parseFloat(document.getElementById('lonCoord').value);
@@ -775,8 +1215,8 @@
       activeToken = document.getElementById('apiKeyInput').value.trim();
 
       try {
-        // Resolve Geocoding / Aliases
-        if (loc) {
+        // Resolve location aliases via geocoding
+        if (loc && !loc.startsWith('Coordinates')) {
           const resLoc = await fetch(`${API_BASE}/v1/location/resolve?query=${encodeURIComponent(loc)}`);
           if (resLoc.ok) {
             const locData = await resLoc.json();
@@ -797,30 +1237,37 @@
         });
 
         if (!res.ok) {
-          const err = await res.json();
+          const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
           throw new Error(err.detail || `HTTP ${res.status}`);
         }
 
         const data = await res.json();
         renderAuditResults(data);
+        document.getElementById('timestampBadge').innerText =
+          `AUDIT ${new Date().toISOString().slice(11, 19)}Z`;
       } catch (err) {
         showBanner(`Sentinel Audit Failed: ${err.message}`, true);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i data-lucide="zap"></i> Audit Numerical Reliability';
+        lucide.createIcons();
       }
     }
 
     function renderAuditResults(d) {
       const probPct = (d.bust_probability * 100).toFixed(1);
       document.getElementById('valBustProb').innerText = `${probPct}%`;
-      
+
       const riskEl = document.getElementById('valRiskTier');
       riskEl.innerText = d.risk_level;
-      if (d.risk_level === 'LOW') { riskEl.style.color = 'var(--risk-low)'; }
-      else if (d.risk_level === 'MEDIUM') { riskEl.style.color = 'var(--risk-med)'; }
-      else { riskEl.style.color = 'var(--risk-high)'; }
+      if (d.risk_level === 'LOW') riskEl.style.color = 'var(--risk-low)';
+      else if (d.risk_level === 'MEDIUM') riskEl.style.color = 'var(--risk-med)';
+      else riskEl.style.color = 'var(--risk-high)';
 
-      document.getElementById('valConformalRange').innerText = `${d.conformal_lower}°C to ${d.conformal_upper}°C`;
+      document.getElementById('valConformalRange').innerText =
+        `${d.conformal_lower}°C to ${d.conformal_upper}°C`;
       document.getElementById('valNoveltyScore').innerText = d.novelty_score.toFixed(3);
-      
+
       const trustPill = document.getElementById('pillTrustState');
       trustPill.innerText = d.trust_state;
       if (d.trust_state === 'DEGRADED') {
@@ -832,11 +1279,18 @@
       }
 
       document.getElementById('pillProvider').innerText = d.provider_provenance;
+
+      // Conformal range visualization
       document.getElementById('lblLower').innerText = `${d.conformal_lower}°C`;
       document.getElementById('lblUpper').innerText = `${d.conformal_upper}°C`;
       const median = ((d.conformal_lower + d.conformal_upper) / 2).toFixed(1);
       document.getElementById('lblMedian').innerText = `${median}°C`;
 
+      // Map uncertainty circle radius (rough approx: 1°C ≈ 100km)
+      const marginDeg = (d.conformal_upper - d.conformal_lower) / 2;
+      uncertaintyCircle.setRadius(Math.max(marginDeg * 100000, 5000));
+
+      // Evidence trace
       document.getElementById('evidenceTrace').innerHTML = `
 [AUDIT-LOG ${new Date().toISOString()}]
 • TARGET LOCATION      : ${d.location}
@@ -845,10 +1299,10 @@
 • PHYSICAL EVIDENCE    : ${d.evidence.join(' | ')}
 • REASON CODES         : ${d.reason_codes.join(', ')}
 • CONFORMAL MARGIN (Δ) : ${(d.conformal_upper - d.conformal_lower).toFixed(2)} °C
-• STATUS               : INTEGRITY GUARANTEED
-      `;
+• STATUS               : INTEGRITY GUARANTEED`;
     }
 
+    // ==================== Batch Sync ====================
     async function executeSyncBatch() {
       activeToken = document.getElementById('apiKeyInput').value.trim();
       const raw = document.getElementById('batchJsonInput').value;
@@ -859,8 +1313,8 @@
           headers: { 'Content-Type': 'application/json', 'X-API-Key': activeToken },
           body: JSON.stringify({ items: items })
         });
-        const data = await res.json();
-        renderBatchTable(data.results);
+        const data = await res.json().catch(() => { throw new Error('Invalid response from batch endpoint'); });
+        renderBatchTable(data.results || []);
       } catch (err) {
         showBanner(`Batch Run Error: ${err.message}`, true);
       }
@@ -875,23 +1329,22 @@
           tr.innerHTML = `
             <td><strong>${r.location}</strong></td>
             <td>${(r.bust_probability * 100).toFixed(1)}%</td>
-            <td><span class="diag-pill" style="background:var(--risk-low-bg);">${r.risk_level}</span></td>
+            <td><span class="diag-pill" style="background:var(--risk-low-bg); color:var(--risk-low);">${r.risk_level}</span></td>
             <td>${r.conformal_lower}° to ${r.conformal_upper}°C</td>
             <td>${r.novelty_score.toFixed(2)}</td>
-            <td><span style="color:var(--risk-low);">● OK</span></td>
-          `;
+            <td><span style="color:var(--risk-low); font-weight:700;">● OK</span></td>`;
         } else {
           tr.innerHTML = `
             <td><strong>${r.location}</strong></td>
             <td colspan="4" style="color:var(--risk-high);">${r.error || 'Coordinates Invalid'}</td>
-            <td><span style="color:var(--risk-high);">● ABSTAIN</span></td>
-          `;
+            <td><span style="color:var(--risk-high); font-weight:700;">● ABSTAIN</span></td>`;
         }
         tbody.appendChild(tr);
       });
       document.getElementById('batchSummaryStats').innerText = `${results.length} Items Processed`;
     }
 
+    // ==================== Batch Async ====================
     async function executeAsyncJob() {
       activeToken = document.getElementById('apiKeyInput').value.trim();
       const raw = document.getElementById('batchJsonInput').value;
@@ -902,51 +1355,66 @@
           headers: { 'Content-Type': 'application/json', 'X-API-Key': activeToken },
           body: JSON.stringify({ items: items })
         });
-        const job = await res.json();
+        const job = await res.json().catch(() => { throw new Error('Invalid job response'); });
         showBanner(`Async Job Enqueued: ID ${job.job_id} (${job.status})`, false);
       } catch (err) {
         showBanner(`Async Dispatch Error: ${err.message}`, true);
       }
     }
 
+    // ==================== Model Registry ====================
     async function fetchModelCatalog() {
       try {
         const res = await fetch(`${API_BASE}/v1/models`);
-        const data = await res.json();
+        const data = await res.json().catch(() => { throw new Error('Invalid models response'); });
         const container = document.getElementById('modelRegistryList');
         container.innerHTML = '';
         data.models.forEach(m => {
           const card = document.createElement('div');
-          card.className = 'kpi-card';
+          card.className = 'model-card';
+          const stageColor = m.stage === 'active' ? 'var(--risk-low)' : 'var(--noaa-muted)';
+          const stageBg = m.stage === 'active' ? 'var(--risk-low-bg)' : '#f0f0f0';
           card.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-              <strong style="font-size:14px; color:#ffffff;">${m.model_id}</strong>
-              <span class="diag-pill" style="background:${m.stage === 'active' ? 'var(--risk-low-bg)' : 'var(--border)'}; color:${m.stage === 'active' ? 'var(--risk-low)' : 'var(--text-muted)'};">${m.stage.toUpperCase()}</span>
+            <div class="model-card-header">
+              <span class="model-card-title">${m.model_id}</span>
+              <span class="diag-pill" style="background:${stageBg}; color:${stageColor};">${m.stage.toUpperCase()}</span>
             </div>
-            <div style="font-size:12px; color:var(--text-secondary); margin-bottom:4px;">Architecture: ${m.algorithm}</div>
-            <div style="font-size:12px; font-family:'JetBrains Mono',monospace; color:var(--text-muted);">SHA-256 Checksum: ${m.checksum}</div>
-            <div style="display:flex; gap:16px; margin-top:8px; font-size:12px;">
-              <span>ROC-AUC: <strong style="color:var(--accent-primary);">${m.metrics.roc_auc}</strong></span>
+            <div class="model-card-meta">Architecture: ${m.algorithm}</div>
+            <div class="model-card-checksum">SHA-256: ${m.checksum}</div>
+            <div class="model-card-metrics">
+              <span>ROC-AUC: <strong style="color:var(--noaa-blue);">${m.metrics.roc_auc}</strong></span>
               <span>Brier Loss: <strong style="color:var(--risk-low);">${m.metrics.brier_score}</strong></span>
-            </div>
-          `;
+            </div>`;
           container.appendChild(card);
         });
       } catch (err) {
         console.error("Failed to load model registry:", err);
+        const container = document.getElementById('modelRegistryList');
+        container.innerHTML = `
+          <div class="model-card">
+            <div class="model-card-header">
+              <span class="model-card-title" style="color:var(--risk-high);">Registry Unavailable</span>
+            </div>
+            <div class="model-card-meta">${err.message}</div>
+          </div>`;
       }
     }
 
+    // ==================== Metrics Scrape ====================
     async function fetchMetricsScrape() {
       try {
         const res = await fetch(`${API_BASE}/metrics`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const text = await res.text();
         document.getElementById('metricsScrapeBox').innerText = text;
       } catch (err) {
         showBanner(`Metrics Scrape Failed: ${err.message}`, true);
+        document.getElementById('metricsScrapeBox').innerText =
+          `# ERROR: ${err.message}\n# Endpoint: ${API_BASE}/metrics\n# Suggest upgrading API tier for observability access.`;
       }
     }
 
+    // ==================== User Preferences ====================
     async function saveUserPreferences() {
       activeToken = document.getElementById('apiKeyInput').value.trim();
       const thresh = parseFloat(document.getElementById('alertSlider').value);
@@ -954,14 +1422,19 @@
         const res = await fetch(`${API_BASE}/v1/user/preferences`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-API-Key': activeToken },
-          body: JSON.stringify({ saved_locations: [{"name": "Kolkata", "lat": 22.57, "lon": 88.36}], alert_threshold: thresh })
+          body: JSON.stringify({
+            saved_locations: [{ "name": "Kolkata", "lat": 22.57, "lon": 88.36 }],
+            alert_threshold: thresh
+          })
         });
         if (res.ok) showBanner("Preferences and Alert Thresholds successfully saved!", false);
+        else throw new Error(`HTTP ${res.status}`);
       } catch (err) {
         showBanner(`Preferences Save Failed: ${err.message}`, true);
       }
     }
 
+    // ==================== Ground Truth Ingestion ====================
     async function submitActualObservation() {
       const adminKey = document.getElementById('apiKeyInput').value.trim();
       const obs = parseFloat(document.getElementById('actualObsTemp').value);
@@ -972,7 +1445,12 @@
         const res = await fetch(`${API_BASE}/v1/actuals`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-API-Key': adminKey },
-          body: JSON.stringify({ location: loc, observed_temperature: obs, predicted_temperature: pred, bust_occurred: Math.abs(obs - pred) >= 2.5 ? 1 : 0 })
+          body: JSON.stringify({
+            location: loc,
+            observed_temperature: obs,
+            predicted_temperature: pred,
+            bust_occurred: Math.abs(obs - pred) >= 2.5 ? 1 : 0
+          })
         });
         if (res.ok) showBanner("Ground truth observation verified and ingested into database!", false);
         else throw new Error("Requires Admin API key (e.g. 'veyra-admin-master-key')");
@@ -981,8 +1459,9 @@
       }
     }
 
-    // Auto-load on init
+    // ==================== Auto-load on init ====================
     executeSentinelAudit();
+    fetchModelCatalog();
   </script>
 </body>
 </html>
