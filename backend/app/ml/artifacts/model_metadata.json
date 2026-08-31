@@ -1,13 +1,13 @@
 {
   "model_id": "veyra-bust-2.1.0",
   "version": "2.1.0",
-  "stage": "active",
-  "algorithm": "calibrated-isotonic-ensemble",
-  "feature_schema_version": "personal-veyra-features-v2",
-  "checksum": "5868ffaf192e",
-  "conformal_quantile_90": 0.7228,
+  "architecture": "Platt-Calibrated-HistGradientBoosting",
+  "sha256_checksum": "adaec18c8352a1d7",
+  "training_sample_count": 10000,
+  "conformal_quantile_90": 0.742,
   "metrics": {
-    "brier_score": 0.1895,
-    "roc_auc": 0.7816
+    "brier_score": 0.2192,
+    "roc_auc": 0.6564,
+    "decision_threshold": 0.28
   }
 }

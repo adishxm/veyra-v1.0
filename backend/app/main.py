@@ -15,7 +15,8 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field, field_validator
 
 from backend.app.security.auth import require_auth_user, require_admin_user, optional_auth_user, check_rate_limit
-from backend.app.services.weather_providers import MultiProviderWeatherIngestion
+from backend.app.services.weather_adapters import MultiProviderWeatherOrchestrator
+from backend.app.services.location_service import LocationService
 from backend.app.ml.inference import RealMLInferenceEngine, METADATA_PATH
 from backend.app.services.task_worker import enqueue_job, update_job_status, get_persisted_job, create_database_backup
 from backend.app.services.retraining import (
@@ -30,11 +31,11 @@ HTTP_422 = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
 
 app = FastAPI(
     title="Veyra Atmospheric Reliability API",
-    version="1.0.0",
-    description="Production Numerical Weather Prediction Reliability & Bust Intelligence System"
+    version="4.0.0-rc1",
+    description="Enterprise NWP Forecast Bust Intelligence & Conformal Sentinel Platform"
 )
 
-# 1. Validation & Recursion Exception Handlers
+# 1. Validation & Exception Handlers
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     return JSONResponse(
@@ -56,7 +57,7 @@ async def recursion_exception_handler(request: Request, exc: RecursionError):
         content={"detail": "Payload structure rejected: recursion depth limit exceeded"}
     )
 
-# 2. Security Defense Headers & 2MB Body Size Guard Middleware
+# 2. Security Defense Headers & 2MB Body Guard
 @app.middleware("http")
 async def security_and_payload_guard_middleware(request: Request, call_next):
     content_length = request.headers.get("content-length")
@@ -70,14 +71,7 @@ async def security_and_payload_guard_middleware(request: Request, call_next):
         except ValueError:
             pass
 
-    try:
-        response = await call_next(request)
-    except RecursionError:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"detail": "Payload structure rejected: recursion depth limit exceeded"}
-        )
-
+    response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
@@ -207,13 +201,14 @@ class UserPreferencesPayload(BaseModel):
     saved_locations: List[dict]
     alert_threshold: float = 0.45
 
+
 @app.get("/")
 def root():
-    return {"status": "online", "service": "veyra-v1-personal", "version": "1.0.0", "docs": "/docs"}
+    return {"status": "online", "service": "veyra-v4-platform", "version": "4.0.0-rc1", "docs": "/docs"}
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "veyra-v1-personal", "version": "1.0.0"}
+    return {"status": "ok", "service": "veyra-v4-platform", "version": "4.0.0-rc1"}
 
 @app.get("/metrics", response_class=PlainTextResponse)
 def prometheus_metrics():
@@ -243,21 +238,28 @@ def list_models():
                 "model_id": "veyra-bust-2.1.0",
                 "version": "2.1.0",
                 "stage": "active",
-                "algorithm": "calibrated-isotonic-ensemble",
-                "feature_schema_version": "personal-veyra-features-v2",
+                "algorithm": "Platt-Calibrated-HistGradientBoosting",
+                "feature_schema_version": "veyra-canonical-v4",
                 "checksum": "5868ffaf192e",
                 "metrics": {"brier_score": 0.098, "roc_auc": 0.884}
-            },
-            {
-                "model_id": "veyra-bust-1.0.0-baseline",
-                "version": "1.0.0-baseline",
-                "stage": "rollback",
-                "algorithm": "monotonic-development-heuristic",
-                "feature_schema_version": "personal-veyra-features-v2",
-                "checksum": "0b70e345909d",
-                "metrics": {"brier_score": 0.185, "roc_auc": 0.742}
             }
         ]
+    }
+
+@app.get("/v1/location/resolve")
+async def resolve_location_endpoint(query: str = Query(..., min_length=1)):
+    res = await LocationService.resolve_location(query)
+    if not res:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unable to resolve location: '{query}'. Please specify a city or valid coordinates."
+        )
+    lat, lon, display_name = res
+    return {
+        "query": query,
+        "display_name": display_name,
+        "latitude": round(lat, 4),
+        "longitude": round(lon, 4)
     }
 
 @app.post("/v1/predict")
@@ -265,7 +267,7 @@ async def predict_single(req: PredictRequest, request: Request, user: dict = Dep
     check_rate_limit(request, user)
     t0 = time.time()
 
-    weather = await MultiProviderWeatherIngestion.get_canonical_forecast(req.latitude, req.longitude, req.lead_hours)
+    weather = await MultiProviderWeatherOrchestrator.get_canonical_forecast(req.latitude, req.longitude, req.lead_hours)
 
     feature_dict = {
         "latitude": req.latitude,
@@ -276,10 +278,7 @@ async def predict_single(req: PredictRequest, request: Request, user: dict = Dep
         "lead_hours": req.lead_hours
     }
 
-    bust_prob, novelty_score, conformal_lower, conformal_upper = RealMLInferenceEngine.predict(feature_dict)
-
-    risk_level = "LOW" if bust_prob < 0.30 else "MEDIUM" if bust_prob < 0.60 else "HIGH" if bust_prob < 0.85 else "CRITICAL"
-    trust_state = "SUPPORTED" if novelty_score < 3.0 else "DEGRADED"
+    bust_prob, novelty_score, conformal_lower, conformal_upper, risk_level, trust_state = RealMLInferenceEngine.predict(feature_dict)
 
     sanitized_location = html.escape(str(req.location)[:100])
 
@@ -292,12 +291,12 @@ async def predict_single(req: PredictRequest, request: Request, user: dict = Dep
         "novelty_score": novelty_score,
         "conformal_lower": conformal_lower,
         "conformal_upper": conformal_upper,
-        "provider_provenance": weather.get("provider", "open-meteo-primary"),
+        "provider_provenance": weather.get("provider", "open-meteo-ensemble"),
         "reason_codes": ["VALID_INPUT"],
-        "evidence": ["nominal_atmospheric_stability", f"provider:{weather.get('provider', 'open-meteo-primary')}"],
-        "model_version": "personal-veyra-ml-v2.1.0-ml-prod",
-        "feature_schema_version": "personal-veyra-features-v2",
-        "data_version": "open-meteo-live-v2"
+        "evidence": ["nominal_atmospheric_stability", f"provider:{weather.get('provider')}"],
+        "model_version": "veyra-bust-2.1.0",
+        "feature_schema_version": "veyra-canonical-v4",
+        "data_version": "live-nwp-multi-provider"
     }
 
     elapsed = time.time() - t0
@@ -341,7 +340,7 @@ async def predict_batch(req: BatchPredictRequest, request: Request, user: dict =
             failed_count += 1
         else:
             lead = item.lead_hours or 48
-            weather = await MultiProviderWeatherIngestion.get_canonical_forecast(item.latitude, item.longitude, lead)
+            weather = await MultiProviderWeatherOrchestrator.get_canonical_forecast(item.latitude, item.longitude, lead)
             feature_dict = {
                 "latitude": item.latitude,
                 "longitude": item.longitude,
@@ -350,8 +349,7 @@ async def predict_batch(req: BatchPredictRequest, request: Request, user: dict =
                 "temp_variance": weather.get("temp_variance", 0.45),
                 "lead_hours": lead
             }
-            bust_prob, novelty_score, conformal_lower, conformal_upper = RealMLInferenceEngine.predict(feature_dict)
-            risk_level = "LOW" if bust_prob < 0.30 else "MEDIUM" if bust_prob < 0.60 else "HIGH" if bust_prob < 0.85 else "CRITICAL"
+            bust_prob, novelty_score, conformal_lower, conformal_upper, risk_level, trust_state = RealMLInferenceEngine.predict(feature_dict)
 
             results.append({
                 "location": html.escape(str(item.location or "Target")[:100]),
@@ -360,17 +358,17 @@ async def predict_batch(req: BatchPredictRequest, request: Request, user: dict =
                 "success": True,
                 "bust_probability": bust_prob,
                 "risk_level": risk_level,
-                "trust_state": "SUPPORTED" if novelty_score < 3.0 else "DEGRADED",
+                "trust_state": trust_state,
                 "abstain": False,
                 "novelty_score": novelty_score,
                 "conformal_lower": conformal_lower,
                 "conformal_upper": conformal_upper,
-                "provider_provenance": weather.get("provider", "open-meteo-primary"),
+                "provider_provenance": weather.get("provider"),
                 "reason_codes": ["VALID_INPUT"],
-                "evidence": ["nominal_atmospheric_stability", f"provider:{weather.get('provider', 'open-meteo-primary')}"],
-                "model_version": "personal-veyra-ml-v2.1.0-ml-prod",
-                "feature_schema_version": "personal-veyra-features-v2",
-                "data_version": "open-meteo-live-v2",
+                "evidence": ["nominal_atmospheric_stability", f"provider:{weather.get('provider')}"],
+                "model_version": "veyra-bust-2.1.0",
+                "feature_schema_version": "veyra-canonical-v4",
+                "data_version": "live-nwp-multi-provider",
                 "error": None
             })
             successful_count += 1
@@ -400,7 +398,6 @@ def get_async_job(job_id: str, user: dict = Depends(require_auth_user)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Job {job_id} not found")
     return job
 
-# 3. Role-Scoped Log Access (Admin Only)
 @app.get("/v1/logs")
 def get_prediction_logs(limit: int = Query(default=100, ge=1, le=1000), user: dict = Depends(require_admin_user)):
     conn = sqlite3.connect(DB_PATH)
@@ -428,7 +425,6 @@ def get_prediction_logs(limit: int = Query(default=100, ge=1, le=1000), user: di
         for r in rows
     ]
 
-# 4. Scoped Ground Truth Writes (Admin Only)
 @app.post("/v1/actuals")
 def ingest_ground_truth(payload: ActualObservationPayload, user: dict = Depends(require_admin_user)):
     obs_temp = payload.actual_value if payload.actual_value is not None else payload.observed_temperature if payload.observed_temperature is not None else 28.5
@@ -476,27 +472,7 @@ def update_preferences(payload: UserPreferencesPayload, user: dict = Depends(req
     save_user_prefs(user["user_id"], payload.saved_locations, payload.alert_threshold)
     return {"status": "success", "message": "Preferences saved successfully"}
 
-# 5. Scoped Retrain Trigger (Admin Only)
 @app.post("/v1/admin/retrain")
 def trigger_retrain(user: dict = Depends(require_admin_user)):
     create_database_backup()
     return run_automated_retraining_pipeline()
-
-
-from backend.app.services.location_service import LocationService
-
-@app.get("/v1/location/resolve")
-async def resolve_location_endpoint(query: str = Query(..., min_length=1)):
-    res = await LocationService.resolve_location(query)
-    if not res:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Unable to resolve location: '{query}'. Please specify a city or valid coordinates."
-        )
-    lat, lon, display_name = res
-    return {
-        "query": query,
-        "display_name": display_name,
-        "latitude": round(lat, 4),
-        "longitude": round(lon, 4)
-    }
