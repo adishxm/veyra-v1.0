@@ -1060,6 +1060,7 @@
 
           <!-- Layer Toggles -->
           <div class="layer-toggles">
+            <label style="font-weight:700; margin-bottom:4px; color:var(--noaa-dark-blue);">Map Layers</label>
             <label>
               <input type="checkbox" id="toggleUncertaintyCircle" checked onchange="toggleMapLayer('uncertaintyCircle')">
               Uncertainty Circle
@@ -1416,7 +1417,6 @@ Awaiting analysis audit trigger...
       fillOpacity: 0.18
     }).addTo(map);
 
-    // Dynamic Real Risk Zone Layer (Real Polygon Box)
     let riskContours = L.layerGroup();
     riskContours.addTo(map);
 
