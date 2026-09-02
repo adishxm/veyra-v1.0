@@ -16,9 +16,9 @@ from backend.app.weather.service import weather_service
 
 router = APIRouter(prefix="/v1", tags=["batch-and-jobs"])
 
+
 class BatchForecastRequest(BaseModel):
     items: List[ForecastRequest] = Field(..., max_length=50)
-
 
 
 class BatchItemResult(BaseModel):
@@ -44,9 +44,9 @@ class BatchResponse(BaseModel):
 
 
 async def _process_single_forecast(
-    req: ForecastRequest, db: Session
+    req: ForecastRequest, db: Session, semaphore: Optional[asyncio.Semaphore] = None
 ) -> BatchItemResult:
-    """Evaluate a single forecast with isolated exception catching."""
+    """Evaluate a single forecast with isolated exception catching and concurrency limit."""
     if req.latitude is None or req.longitude is None:
         return BatchItemResult(
             location=req.location,
@@ -54,70 +54,77 @@ async def _process_single_forecast(
             error="Missing latitude or longitude coordinates.",
         )
 
-    try:
-        forecast = await weather_service.get_forecast(
-            location=req.location,
-            latitude=req.latitude,
-            longitude=req.longitude,
-            variable=req.variable,
-            lead_hours=req.lead_hours,
-        )
-        features = build_features(forecast)
-        active_scorer, _ = model_registry.get_active_model()
-        result = active_scorer.predict_probability(features)
-        safety = evaluate(feature_values=features, probability=result.probability)
-        interval = conformal_engine.compute_conformal_interval(
-            forecast_mean=features.get("forecast_mean", 0.0),
-            spread=features.get("forecast_spread", 1.0),
-        )
+    async def _fetch():
+        try:
+            forecast = await weather_service.get_forecast(
+                location=req.location,
+                latitude=req.latitude,
+                longitude=req.longitude,
+                variable=req.variable,
+                lead_hours=req.lead_hours,
+            )
+            features = build_features(forecast)
+            active_scorer, _ = model_registry.get_active_model()
+            result = active_scorer.predict_probability(features)
+            safety = evaluate(feature_values=features, probability=result.probability)
+            interval = conformal_engine.compute_conformal_interval(
+                forecast_mean=features.get("forecast_mean", 0.0),
+                spread=features.get("forecast_spread", 1.0),
+            )
 
-        log_entry = PredictionLog(
-            location=req.location,
-            latitude=req.latitude,
-            longitude=req.longitude,
-            variable=req.variable,
-            lead_hours=req.lead_hours,
-            forecast_mean=features.get("forecast_mean"),
-            forecast_spread=features.get("forecast_spread"),
-            member_count=int(features.get("member_count", 0)),
-            bust_probability=None if safety.abstain else result.probability,
-            risk_level=None if safety.abstain else result.risk_level,
-            trust_state=safety.trust_state,
-            abstain=safety.abstain,
-            model_version=None if safety.abstain else result.model_version,
-        )
-        db.add(log_entry)
-        db.commit()
+            log_entry = PredictionLog(
+                location=req.location,
+                latitude=req.latitude,
+                longitude=req.longitude,
+                variable=req.variable,
+                lead_hours=req.lead_hours,
+                forecast_mean=features.get("forecast_mean"),
+                forecast_spread=features.get("forecast_spread"),
+                member_count=int(features.get("member_count", 0)),
+                bust_probability=None if safety.abstain else result.probability,
+                risk_level=None if safety.abstain else result.risk_level,
+                trust_state=safety.trust_state,
+                abstain=safety.abstain,
+                model_version=None if safety.abstain else result.model_version,
+            )
+            db.add(log_entry)
+            db.commit()
 
-        return BatchItemResult(
-            location=req.location,
-            latitude=req.latitude,
-            longitude=req.longitude,
-            success=True,
-            bust_probability=None if safety.abstain else result.probability,
-            risk_level=None if safety.abstain else result.risk_level,
-            trust_state=safety.trust_state,
-            abstain=safety.abstain,
-            novelty_score=safety.novelty_score,
-            conformal_lower=None if safety.abstain else interval.lower_bound,
-            conformal_upper=None if safety.abstain else interval.upper_bound,
-        )
-    except Exception as ex:
-        return BatchItemResult(
-            location=req.location,
-            latitude=req.latitude,
-            longitude=req.longitude,
-            success=False,
-            error=str(ex),
-        )
+            return BatchItemResult(
+                location=req.location,
+                latitude=req.latitude,
+                longitude=req.longitude,
+                success=True,
+                bust_probability=None if safety.abstain else result.probability,
+                risk_level=None if safety.abstain else result.risk_level,
+                trust_state=safety.trust_state,
+                abstain=safety.abstain,
+                novelty_score=safety.novelty_score,
+                conformal_lower=None if safety.abstain else interval.lower_bound,
+                conformal_upper=None if safety.abstain else interval.upper_bound,
+            )
+        except Exception as ex:
+            return BatchItemResult(
+                location=req.location,
+                latitude=req.latitude,
+                longitude=req.longitude,
+                success=False,
+                error=str(ex),
+            )
+
+    if semaphore:
+        async with semaphore:
+            return await _fetch()
+    return await _fetch()
 
 
 @router.post("/predict/batch", response_model=BatchResponse)
 async def predict_batch(
     payload: BatchForecastRequest, db: Session = Depends(get_db)
 ) -> BatchResponse:
-    """Synchronous concurrent batch evaluation with failure isolation."""
-    tasks = [_process_single_forecast(item, db) for item in payload.items]
+    """Synchronous concurrent batch evaluation with failure isolation and bounded concurrency."""
+    semaphore = asyncio.Semaphore(10)
+    tasks = [_process_single_forecast(item, db, semaphore) for item in payload.items]
     results = await asyncio.gather(*tasks)
 
     success_count = sum(1 for r in results if r.success)
@@ -131,8 +138,9 @@ async def predict_batch(
 
 async def _run_background_batch(job_id: str, items: List[ForecastRequest]):
     db = SessionLocal()
+    semaphore = asyncio.Semaphore(10)
     try:
-        tasks = [_process_single_forecast(item, db) for item in items]
+        tasks = [_process_single_forecast(item, db, semaphore) for item in items]
         results = await asyncio.gather(*tasks)
         dict_results = [r.model_dump() for r in results]
         job_manager.update_progress(job_id, dict_results)
