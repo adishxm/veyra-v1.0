@@ -1073,6 +1073,10 @@
               <input type="checkbox" id="toggleRiskContours" checked onchange="toggleMapLayer('riskContours')">
               Dynamic Risk Zone (Real Polygon)
             </label>
+            <label>
+              <input type="checkbox" id="toggleConformalEnvelope" checked onchange="toggleMapLayer('conformalEnvelope')">
+              Conformal Error Envelope
+            </label>
           </div>
 
           <!-- Map Legend -->
@@ -1438,6 +1442,12 @@ Awaiting analysis audit trigger...
       } else if (layerName === 'riskContours') {
         if (document.getElementById('toggleRiskContours').checked) map.addLayer(riskContours);
         else map.removeLayer(riskContours);
+      } else if (layerName === 'conformalEnvelope') {
+        if (document.getElementById('toggleConformalEnvelope').checked) {
+          if (targetMarker) map.addLayer(targetMarker);
+        } else {
+          if (targetMarker) map.removeLayer(targetMarker);
+        }
       }
     }
 
@@ -1515,7 +1525,8 @@ Awaiting analysis audit trigger...
       autocompleteList.style.display = 'none';
 
       map.flyTo([lat, lon], 8, { duration: 1.0 });
-      updateMarker(lat, lon, fullName, 'LOOKUP', '#0071bc');
+      targetMarker.setLatLng([lat, lon]);
+      uncertaintyCircle.setLatLng([lat, lon]);
     }
 
     // --- Feature 2: Live Browser Geolocation ---
@@ -1540,7 +1551,8 @@ Awaiting analysis audit trigger...
           if (gpsBtn) gpsBtn.disabled = false;
 
           map.flyTo([lat, lon], 9, { duration: 1.2 });
-          updateMarker(lat, lon, "Your Live Location", "LIVE", "#10b981");
+          targetMarker.setLatLng([lat, lon]);
+          uncertaintyCircle.setLatLng([lat, lon]);
         },
         (error) => {
           if (gpsBtn) gpsBtn.disabled = false;
