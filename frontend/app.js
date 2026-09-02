@@ -68,21 +68,23 @@ async function resolveLocationCoordinates(query) {
 const locationInput = document.getElementById("location");
 let debounceTimer;
 
-locationInput.addEventListener("input", () => {
-  clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(async () => {
-    const query = locationInput.value;
-    if (query.length >= 3 && !query.startsWith("Coordinates")) {
-      const match = await resolveLocationCoordinates(query);
-      if (match) {
-        document.getElementById("latitude").value = match.lat;
-        document.getElementById("longitude").value = match.lon;
-        updateMarker(match.lat, match.lon, match.name, "LOOKUP", "#38bdf8");
-        map.flyTo([match.lat, match.lon], 7, { duration: 1.2 });
+if (locationInput) {
+  locationInput.addEventListener("input", () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(async () => {
+      const query = locationInput.value;
+      if (query.length >= 3 && !query.startsWith("Coordinates")) {
+        const match = await resolveLocationCoordinates(query);
+        if (match) {
+          document.getElementById("latitude").value = match.lat;
+          document.getElementById("longitude").value = match.lon;
+          updateMarker(match.lat, match.lon, match.name, "LOOKUP", "#38bdf8");
+          map.flyTo([match.lat, match.lon], 7, { duration: 1.2 });
+        }
       }
-    }
-  }, 400);
-});
+    }, 400);
+  });
+}
 
 function updateMarker(lat, lon, label, risk, color) {
   if (currentMarker) map.removeLayer(currentMarker);
@@ -97,103 +99,112 @@ function updateMarker(lat, lon, label, risk, color) {
     .openPopup();
 }
 
-document.getElementById("prediction-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const btn = document.getElementById("submit-btn");
-  btn.disabled = true;
-  btn.innerText = "Evaluating...";
-
-  let loc = document.getElementById("location").value.trim();
-  let lat = parseFloat(document.getElementById("latitude").value);
-  let lon = parseFloat(document.getElementById("longitude").value);
-  const variable = document.getElementById("variable").value;
-  const leadHours = parseInt(document.getElementById("lead_hours").value, 10);
-
-  if (isNaN(lat) || isNaN(lon) || !loc.startsWith("Coordinates")) {
-    const resolved = await resolveLocationCoordinates(loc);
-    if (resolved) {
-      lat = resolved.lat;
-      lon = resolved.lon;
-      loc = resolved.name;
-      document.getElementById("latitude").value = lat;
-      document.getElementById("longitude").value = lon;
-      document.getElementById("location").value = loc;
-    }
-  }
-
-  if (isNaN(lat) || isNaN(lon)) {
-    alert("Could not locate the requested area. Please select a spot on the map or enter coordinates.");
-    btn.disabled = false;
-    btn.innerText = "Evaluate Reliability";
-    return;
-  }
-
-  const payload = {
-    location: loc,
-    latitude: lat,
-    longitude: lon,
-    variable: variable,
-    lead_hours: leadHours,
-  };
-
-  try {
-    const res = await fetch(`${API_BASE}/v1/predict`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": CLIENT_TOKEN,
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.detail || "Inference evaluation failed");
+const predForm = document.getElementById("prediction-form");
+if (predForm) {
+  predForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById("submit-btn");
+    if (btn) {
+      btn.disabled = true;
+      btn.innerText = "Evaluating...";
     }
 
-    document.getElementById("res-location").innerText = data.location;
-    document.getElementById("res-prob").innerText = `${(data.bust_probability * 100).toFixed(1)}%`;
+    let loc = document.getElementById("location").value.trim();
+    let lat = parseFloat(document.getElementById("latitude").value);
+    let lon = parseFloat(document.getElementById("longitude").value);
+    const variable = document.getElementById("variable").value;
+    const leadHours = parseInt(document.getElementById("lead_hours").value, 10);
 
-    const riskEl = document.getElementById("res-risk");
-    riskEl.innerText = data.risk_level;
-
-    let color = "#10b981";
-    let colorClass = "text-emerald-400";
-
-    if (data.risk_level === "MEDIUM") {
-      color = "#f59e0b";
-      colorClass = "text-amber-400";
-    } else if (data.risk_level === "HIGH" || data.risk_level === "CRITICAL") {
-      color = "#ef4444";
-      colorClass = "text-rose-500";
+    if (isNaN(lat) || isNaN(lon) || !loc.startsWith("Coordinates")) {
+      const resolved = await resolveLocationCoordinates(loc);
+      if (resolved) {
+        lat = resolved.lat;
+        lon = resolved.lon;
+        loc = resolved.name;
+        document.getElementById("latitude").value = lat;
+        document.getElementById("longitude").value = lon;
+        document.getElementById("location").value = loc;
+      }
     }
 
-    riskEl.className = `text-2xl font-bold mono ${colorClass}`;
-
-    const trustBadge = document.getElementById("res-trust-badge");
-    if (trustBadge) {
-      trustBadge.innerText = data.trust_state;
-      trustBadge.className = `px-3 py-1 rounded-full text-xs mono font-semibold border ${
-        data.trust_state === "SUPPORTED"
-          ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-          : "bg-amber-500/10 text-amber-400 border-amber-500/20"
-      }`;
+    if (isNaN(lat) || isNaN(lon)) {
+      alert("Could not locate the requested area. Please select a spot on the map or enter coordinates.");
+      if (btn) {
+        btn.disabled = false;
+        btn.innerText = "Evaluate Reliability";
+      }
+      return;
     }
 
-    document.getElementById("res-conformal").innerText = `[${data.conformal_lower}°C , ${data.conformal_upper}°C]`;
+    const payload = {
+      location: loc,
+      latitude: lat,
+      longitude: lon,
+      variable: variable,
+      lead_hours: leadHours,
+    };
 
-    map.flyTo([lat, lon], 6, { duration: 1.0 });
-    updateMarker(
-      lat,
-      lon,
-      `${data.location} | Risk: ${data.risk_level} | Bust: ${(data.bust_probability * 100).toFixed(1)}%`,
-      data.risk_level,
-      color
-    );
-  } catch (err) {
-    alert("Inference Error: " + err.message);
-  } finally {
-    btn.disabled = false;
-    btn.innerText = "Evaluate Reliability";
-  }
-});
+    try {
+      const res = await fetch(`${API_BASE}/v1/predict`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": CLIENT_TOKEN,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || "Inference evaluation failed");
+      }
+
+      document.getElementById("res-location").innerText = data.location;
+      document.getElementById("res-prob").innerText = `${(data.bust_probability * 100).toFixed(1)}%`;
+
+      const riskEl = document.getElementById("res-risk");
+      riskEl.innerText = data.risk_level;
+
+      let color = "#10b981";
+      let colorClass = "text-emerald-400";
+
+      if (data.risk_level === "MEDIUM") {
+        color = "#f59e0b";
+        colorClass = "text-amber-400";
+      } else if (data.risk_level === "HIGH" || data.risk_level === "CRITICAL") {
+        color = "#ef4444";
+        colorClass = "text-rose-500";
+      }
+
+      riskEl.className = `text-2xl font-bold mono ${colorClass}`;
+
+      const trustBadge = document.getElementById("res-trust-badge");
+      if (trustBadge) {
+        trustBadge.innerText = data.trust_state;
+        trustBadge.className = `px-3 py-1 rounded-full text-xs mono font-semibold border ${
+          data.trust_state === "SUPPORTED"
+            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+            : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+        }`;
+      }
+
+      document.getElementById("res-conformal").innerText = `[${data.conformal_lower}°C , ${data.conformal_upper}°C]`;
+
+      map.flyTo([lat, lon], 6, { duration: 1.0 });
+      updateMarker(
+        lat,
+        lon,
+        `${data.location} | Risk: ${data.risk_level} | Bust: ${(data.bust_probability * 100).toFixed(1)}%`,
+        data.risk_level,
+        color
+      );
+    } catch (err) {
+      alert("Inference Error: " + err.message);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerText = "Evaluate Reliability";
+      }
+    }
+  });
+}
