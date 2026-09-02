@@ -999,7 +999,7 @@
                 <i data-lucide="locate" style="width: 16px; height: 16px;"></i>
               </button>
             </div>
-            <!-- Google-like Autocomplete Dropdown List -->
+            <!-- Google-like Autocomplete Dropdown List with unique filtering -->
             <div id="autocompleteList" style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: #ffffff; border: 1px solid var(--noaa-border); border-radius: 0 0 6px 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000; max-height: 220px; overflow-y: auto;"></div>
             <div class="input-hint">Type to search globally or click target icon for live GPS</div>
           </div>
@@ -1442,7 +1442,7 @@ Awaiting analysis audit trigger...
       }
     }
 
-    // --- Feature 1: Google-like Autocomplete ---
+    // --- Feature 1: Google-like Autocomplete with Unique Deduplication ---
     const locQueryInput = document.getElementById('locQuery');
     const autocompleteList = document.getElementById('autocompleteList');
     let autocompleteTimer = null;
@@ -1459,12 +1459,21 @@ Awaiting analysis audit trigger...
 
         autocompleteTimer = setTimeout(async () => {
           try {
-            const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=6&language=en&format=json`;
+            const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=10&language=en&format=json`;
             const res = await fetch(url);
             const data = await res.json();
             
             if (data.results && data.results.length > 0) {
-              autocompleteList.innerHTML = data.results.map(place => {
+              // Deduplicate results by name + admin1 (state) + country
+              const seen = new Set();
+              const uniqueResults = data.results.filter(place => {
+                const identifier = `${place.name}|${place.admin1 || ''}|${place.country || ''}`.toLowerCase();
+                if (seen.has(identifier)) return false;
+                seen.add(identifier);
+                return true;
+              });
+
+              autocompleteList.innerHTML = uniqueResults.map(place => {
                 const subtitle = [place.admin1, place.country].filter(Boolean).join(', ');
                 return `
                   <div class="autocomplete-item" onclick="selectAutocompletePlace(${place.latitude}, ${place.longitude}, '${escapeHtml(place.name)}', '${escapeHtml(subtitle)}')">
@@ -2010,7 +2019,7 @@ Awaiting analysis audit trigger...
           })
         });
         if (res.ok) showBanner("Ground truth observation verified and ingested into database!", false);
-        else throw new Error("Requires Admin API key (e.g. 'veyra-admin-master-key')");
+        else throw new Error("Requires Admin Admin key (e.g. 'veyra-admin-master-key')");
       } catch (err) {
         showBanner(`Ingestion Error: ${err.message}`, true);
       }
