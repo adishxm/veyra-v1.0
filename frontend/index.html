@@ -999,7 +999,7 @@
                 <i data-lucide="locate" style="width: 16px; height: 16px;"></i>
               </button>
             </div>
-            <!-- Google-like Autocomplete Dropdown List with unique filtering -->
+            <!-- Google-like Autocomplete Dropdown List with Unique Deduplication -->
             <div id="autocompleteList" style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: #ffffff; border: 1px solid var(--noaa-border); border-radius: 0 0 6px 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000; max-height: 220px; overflow-y: auto;"></div>
             <div class="input-hint">Type to search globally or click target icon for live GPS</div>
           </div>
@@ -1070,7 +1070,7 @@
             </label>
             <label>
               <input type="checkbox" id="toggleRiskContours" checked onchange="toggleMapLayer('riskContours')">
-              Risk Contours (demo)
+              Dynamic Risk Zone (Real)
             </label>
           </div>
 
@@ -1083,7 +1083,7 @@
               <span class="legend-color" style="background: #38bdf8;"></span> Conformal Uncertainty
             </div>
             <div class="legend-item">
-              <span class="legend-color" style="background: #cd2026;"></span> High Risk Area (demo)
+              <span class="legend-color" style="background: #cd2026;"></span> High Risk Zone (Active)
             </div>
           </div>
         </div>
@@ -1416,9 +1416,8 @@ Awaiting analysis audit trigger...
       fillOpacity: 0.18
     }).addTo(map);
 
+    // Dynamic Real Risk Zone Layer (replaces static demo contours)
     let riskContours = L.layerGroup();
-    L.circle([23.10, 88.60], { radius: 45000, color: '#cd2026', fillColor: '#ef4444', fillOpacity: 0.25 }).addTo(riskContours);
-    L.circle([22.10, 87.90], { radius: 35000, color: '#cd2026', fillColor: '#ef4444', fillOpacity: 0.25 }).addTo(riskContours);
     riskContours.addTo(map);
 
     map.on('click', e => {
@@ -1464,7 +1463,6 @@ Awaiting analysis audit trigger...
             const data = await res.json();
             
             if (data.results && data.results.length > 0) {
-              // Deduplicate results by name + admin1 (state) + country
               const seen = new Set();
               const uniqueResults = data.results.filter(place => {
                 const identifier = `${place.name}|${place.admin1 || ''}|${place.country || ''}`.toLowerCase();
@@ -1697,7 +1695,7 @@ Awaiting analysis audit trigger...
       }
     }
 
-    // 8. Sentinel Audit Execution
+    // 8. Sentinel Audit Execution with Dynamic Risk Zone Rendering
     async function executeSentinelAudit() {
       const btn = document.getElementById('btnAudit');
       btn.disabled = true;
@@ -1813,8 +1811,24 @@ Awaiting analysis audit trigger...
       document.getElementById('rangeFillBar').style.width = `${widthPct}%`;
       document.getElementById('rangeTargetPin').style.left = `${medianPct}%`;
 
+      const lat = parseFloat(document.getElementById('latCoord').value);
+      const lon = parseFloat(document.getElementById('lonCoord').value);
+
       const marginDeg = (d.conformal_upper - d.conformal_lower) / 2;
+      uncertaintyCircle.setLatLng([lat, lon]);
       uncertaintyCircle.setRadius(Math.max(marginDeg * 25000, 15000));
+
+      // Dynamically render real active high-risk zone if bust probability > 0.40 or RISK is HIGH/CRITICAL
+      riskContours.clearLayers();
+      if (d.bust_probability >= 0.40 || d.risk_level === 'HIGH' || d.risk_level === 'CRITICAL') {
+        const riskCircle = L.circle([lat, lon], {
+          radius: Math.max(marginDeg * 40000, 30000),
+          color: '#cd2026',
+          fillColor: '#ef4444',
+          fillOpacity: 0.35
+        }).bindPopup(`<b>Active High Risk Zone</b><br>Bust Odds: ${(d.bust_probability * 100).toFixed(1)}%<br>Risk: ${d.risk_level}`);
+        riskContours.addLayer(riskCircle);
+      }
 
       if (forecastChart && multiHorizonData && multiHorizonData.results) {
         const upperCurve = multiHorizonData.results.map(r => r.conformal_upper);
@@ -2019,7 +2033,7 @@ Awaiting analysis audit trigger...
           })
         });
         if (res.ok) showBanner("Ground truth observation verified and ingested into database!", false);
-        else throw new Error("Requires Admin Admin key (e.g. 'veyra-admin-master-key')");
+        else throw new Error("Requires Admin key (e.g. 'veyra-admin-master-key')");
       } catch (err) {
         showBanner(`Ingestion Error: ${err.message}`, true);
       }
