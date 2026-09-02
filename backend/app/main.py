@@ -231,19 +231,26 @@ def prometheus_metrics():
 
 @app.get("/v1/models")
 def list_models():
+    _, metadata = RealMLInferenceEngine.load_model()
+    if not metadata:
+        metadata = {
+            "model_id": "veyra-bust-2.1.0",
+            "version": "2.1.0",
+            "stage": "active",
+            "algorithm": "Platt-Calibrated-HistGradientBoosting",
+            "feature_schema_version": "veyra-canonical-v4",
+            "checksum": "adaec18c",
+            "metrics": {"brier_score": 0.2192, "roc_auc": 0.6564}
+        }
+    else:
+        metadata.setdefault("stage", "active")
+        metadata.setdefault("feature_schema_version", "veyra-canonical-v4")
+        if "sha256_checksum" in metadata and "checksum" not in metadata:
+            metadata["checksum"] = metadata["sha256_checksum"]
+
     return {
-        "active_version": "2.1.0",
-        "models": [
-            {
-                "model_id": "veyra-bust-2.1.0",
-                "version": "2.1.0",
-                "stage": "active",
-                "algorithm": "Platt-Calibrated-HistGradientBoosting",
-                "feature_schema_version": "veyra-canonical-v4",
-                "checksum": "5868ffaf192e",
-                "metrics": {"brier_score": 0.098, "roc_auc": 0.884}
-            }
-        ]
+        "active_version": metadata.get("version", "2.1.0"),
+        "models": [metadata]
     }
 
 @app.get("/v1/location/resolve")
@@ -455,12 +462,15 @@ def get_validation_metrics(user: dict = Depends(require_auth_user)):
     count = cur.fetchone()[0]
     conn.close()
 
+    _, metadata = RealMLInferenceEngine.load_model()
+    metrics = metadata.get("metrics", {}) if metadata else {}
+
     return {
         "status": "active",
         "verified_count": count,
-        "brier_score": 0.098,
+        "brier_score": metrics.get("brier_score", 0.2192),
         "mean_absolute_error": 0.82,
-        "roc_auc": 0.884
+        "roc_auc": metrics.get("roc_auc", 0.6564)
     }
 
 @app.get("/v1/user/preferences")
