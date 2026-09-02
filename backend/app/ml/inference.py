@@ -2,13 +2,17 @@ import os
 import json
 import joblib
 import math
+import logging
 import numpy as np
 from typing import Dict, Any, Tuple
 from backend.app.ml.conformal_ood_engine import ConformalOODSentinel
 
+logger = logging.getLogger("veyra.ml.inference")
+
 ARTIFACT_DIR = os.path.join(os.path.dirname(__file__), "artifacts")
 MODEL_PATH = os.path.join(ARTIFACT_DIR, "veyra_model_v2_1_0.joblib")
 METADATA_PATH = os.path.join(ARTIFACT_DIR, "model_metadata.json")
+
 
 class RealMLInferenceEngine:
     _artifact = None
@@ -19,14 +23,19 @@ class RealMLInferenceEngine:
         if cls._artifact is None and os.path.exists(MODEL_PATH):
             try:
                 cls._artifact = joblib.load(MODEL_PATH)
-            except Exception:
+                logger.info("Successfully loaded Veyra ML artifact from %s", MODEL_PATH)
+            except Exception as e:
+                logger.warning("Failed to load ML artifact (%s). Falling back to heuristic mode.", e)
                 cls._artifact = None
+
         if cls._metadata is None and os.path.exists(METADATA_PATH):
             try:
                 with open(METADATA_PATH, "r") as f:
                     cls._metadata = json.load(f)
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to load model metadata (%s).", e)
                 cls._metadata = None
+
         return cls._artifact, cls._metadata
 
     @classmethod
@@ -46,9 +55,14 @@ class RealMLInferenceEngine:
         novelty = ConformalOODSentinel.compute_mahalanobis_novelty(target_temp, spread, temp_var, lead_hours)
         feat_vector = np.array([[spread, temp_var, 0.0, 0.0, lead_hours, novelty]])
 
+        # Execute through trained pipeline if available; otherwise use heuristic fallback
         if artifact is not None and isinstance(artifact, dict) and "classifier" in artifact:
-            raw_p = artifact["classifier"].predict_proba(feat_vector)[:, 1].reshape(-1, 1)
-            raw_score = float(artifact["calibrator"].predict_proba(raw_p)[0, 1])
+            try:
+                raw_p = artifact["classifier"].predict_proba(feat_vector)[:, 1].reshape(-1, 1)
+                raw_score = float(artifact["calibrator"].predict_proba(raw_p)[0, 1])
+            except Exception as exc:
+                logger.error("Inference execution failed on artifact: %s. Using heuristic fallback.", exc)
+                raw_score = 0.10 + (spread * 0.12) + (lead_hours / 240.0) * 0.25
         else:
             raw_score = 0.10 + (spread * 0.12) + (lead_hours / 240.0) * 0.25
 
