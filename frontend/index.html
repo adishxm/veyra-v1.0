@@ -1707,11 +1707,11 @@ Awaiting analysis audit trigger...
       }
     }
 
-    // 8. Sentinel Audit Execution with True Data-Driven Polygon
+    // 8. Lightning-Fast Sentinel Audit Execution
     async function executeSentinelAudit() {
       const btn = document.getElementById('btnAudit');
       btn.disabled = true;
-      btn.innerHTML = '<i data-lucide="loader" style="width:16px; animation:spin 1s linear infinite;"></i> Auditing Reliability...';
+      btn.innerHTML = '<i data-lucide="loader" style="width:16px; animation:spin 1s linear infinite;"></i> Auditing...';
       lucide.createIcons();
 
       const loc = document.getElementById('locQuery').value.trim();
@@ -1746,28 +1746,7 @@ Awaiting analysis audit trigger...
         }
 
         const data = await res.json();
-
-        const horizonPayload = {
-          items: [24, 48, 72, 120, 240].map(h => ({
-            location: loc || "Target",
-            latitude: lat,
-            longitude: lon,
-            lead_hours: h
-          }))
-        };
-
-        const batchRes = await fetch(`${API_BASE}/v1/predict/batch`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-API-Key': activeToken },
-          body: JSON.stringify(horizonPayload)
-        });
-
-        let multiHorizonData = null;
-        if (batchRes.ok) {
-          multiHorizonData = await batchRes.json();
-        }
-
-        renderAuditResults(data, multiHorizonData);
+        renderAuditResults(data, null);
         document.getElementById('timestampBadge').innerText = `AUDIT ${new Date().toISOString().slice(11, 19)}Z`;
       } catch (err) {
         showBanner(`Sentinel Audit Failed: ${err.message}`, true);
@@ -1778,7 +1757,7 @@ Awaiting analysis audit trigger...
       }
     }
 
-    function renderAuditResults(d, multiHorizonData) {
+    function renderAuditResults(d) {
       const probPct = (d.bust_probability * 100).toFixed(1);
       document.getElementById('valBustProb').innerText = `${probPct}%`;
 
@@ -1854,19 +1833,6 @@ Awaiting analysis audit trigger...
         }).bindPopup(`<b>Live Data-Driven Risk Polygon</b><br>Target: ${d.location}<br>Conformal Margin: Δ ${marginDeg.toFixed(2)}°C<br>Bust Odds: ${(d.bust_probability * 100).toFixed(1)}%`);
         
         riskContours.addLayer(riskPolygon);
-      }
-
-      if (forecastChart && multiHorizonData && multiHorizonData.results) {
-        const upperCurve = multiHorizonData.results.map(r => r.conformal_upper);
-        const lowerCurve = multiHorizonData.results.map(r => r.conformal_lower);
-        const tempCurve = multiHorizonData.results.map(r => parseFloat(((r.conformal_lower + r.conformal_upper) / 2).toFixed(1)));
-        const probCurve = multiHorizonData.results.map(r => parseFloat((r.bust_probability * 100).toFixed(1)));
-
-        forecastChart.data.datasets[0].data = upperCurve;
-        forecastChart.data.datasets[1].data = lowerCurve;
-        forecastChart.data.datasets[2].data = tempCurve;
-        forecastChart.data.datasets[3].data = probCurve;
-        forecastChart.update();
       }
 
       document.getElementById('evidenceTrace').innerHTML = `
