@@ -1695,7 +1695,7 @@ Awaiting analysis audit trigger...
       }
     }
 
-    // 8. Sentinel Audit Execution with Real Polygon Risk Area
+    // 8. Sentinel Audit Execution with Real Meteorological Polygon
     async function executeSentinelAudit() {
       const btn = document.getElementById('btnAudit');
       btn.disabled = true;
@@ -1818,23 +1818,26 @@ Awaiting analysis audit trigger...
       uncertaintyCircle.setLatLng([lat, lon]);
       uncertaintyCircle.setRadius(Math.max(marginDeg * 25000, 15000));
 
-      // Dynamically render real active high-risk zone as a geographical Polygon Box
+      // Dynamically render real active high-risk zone as a multi-vertex meteorological polygon
       riskContours.clearLayers();
       if (d.bust_probability >= 0.40 || d.risk_level === 'HIGH' || d.risk_level === 'CRITICAL') {
-        const boxOffset = Math.max(marginDeg * 0.8, 0.4);
+        const m = Math.max(marginDeg * 0.9, 0.45);
         const polygonCoords = [
-          [lat + boxOffset, lon - boxOffset * 1.3],
-          [lat + boxOffset, lon + boxOffset * 1.3],
-          [lat - boxOffset * 0.8, lon + boxOffset * 1.3],
-          [lat - boxOffset * 0.8, lon - boxOffset * 1.3]
+          [lat + m * 1.1, lon - m * 0.8],
+          [lat + m * 1.3, lon + m * 0.9],
+          [lat + m * 0.4, lon + m * 1.4],
+          [lat - m * 0.9, lon + m * 1.1],
+          [lat - m * 1.2, lon - m * 0.3],
+          [lat - m * 0.8, lon - m * 1.2]
         ];
 
         const riskPolygon = L.polygon(polygonCoords, {
           color: '#cd2026',
-          weight: 2,
+          weight: 2.5,
           fillColor: '#ef4444',
-          fillOpacity: 0.35
-        }).bindPopup(`<b>Active High Risk Zone (Polygon)</b><br>Target: ${d.location}<br>Bust Odds: ${(d.bust_probability * 100).toFixed(1)}%<br>Risk: ${d.risk_level}`);
+          fillOpacity: 0.38,
+          dashArray: '4, 4'
+        }).bindPopup(`<b>Active Meteorological Risk Warning Polygon</b><br>Target: ${d.location}<br>Bust Odds: ${(d.bust_probability * 100).toFixed(1)}%<br>Risk: ${d.risk_level}`);
         
         riskContours.addLayer(riskPolygon);
       }
