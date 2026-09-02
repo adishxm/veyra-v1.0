@@ -44,7 +44,7 @@ class MultiProviderWeatherIngestion:
         )
 
         async with httpx.AsyncClient(
-            timeout=httpx.Timeout(10.0, connect=4.0),
+            timeout=httpx.Timeout(12.0, connect=8.0),
             follow_redirects=True,
             headers={"User-Agent": "VeyraAtmosphericEngine/2.1 (contact@veyra.io)"}
         ) as client:
@@ -184,19 +184,22 @@ class MultiProviderWeatherIngestion:
         sun_elevation = math.degrees(math.asin(max(-1.0, min(1.0, cos_zenith))))
 
         # Calibrated baseline mapping
-        effective_lat_diff = abs(lat - declination)
-        if effective_lat_diff <= 15.0:
+        diff = abs(lat - declination)
+        if lat <= -60.0:
+            # Antarctic continent & ice plateau: extreme lapse rate + high elevation (2500m-3000m)
+            base_thermal = -42.0 - ((abs(lat) - 60.0) * 0.75)
+        elif diff <= 15.0:
             # Tropical / subsolar belt
-            base_thermal = 30.0 - (effective_lat_diff * 0.15)
-        elif effective_lat_diff <= 40.0:
+            base_thermal = 30.0 - (diff * 0.15)
+        elif diff <= 40.0:
             # Subtropical / Mediterranean
-            base_thermal = 27.75 - ((effective_lat_diff - 15.0) * 0.35)
-        elif effective_lat_diff <= 70.0:
+            base_thermal = 27.75 - ((diff - 15.0) * 0.35)
+        elif diff <= 70.0:
             # Mid-latitude temperate
-            base_thermal = 19.0 - ((effective_lat_diff - 40.0) * 0.60)
+            base_thermal = 19.0 - ((diff - 40.0) * 0.60)
         else:
             # Polar
-            base_thermal = 1.0 - ((effective_lat_diff - 70.0) * 1.10)
+            base_thermal = 1.0 - ((diff - 70.0) * 1.10)
 
         # Diurnal heating curve (bounded between -1.5°C night and +4.5°C day)
         if sun_elevation > 0:
