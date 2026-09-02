@@ -927,7 +927,7 @@
     <div class="header-status-group">
       <span class="status-badge">
         <span class="status-dot"></span>
-        <span id="gatewayStatus">GATEWAY LIVE</span>
+        <span id="healthStatus">GATEWAY LIVE</span>
       </span>
       <span class="status-badge">
         <span style="color:#ffd200; font-weight:700;">|</span>
@@ -991,10 +991,17 @@
             <span class="panel-badge">Issue-Time Safe</span>
           </div>
 
-          <div class="form-group">
+          <div class="form-group" style="position: relative;">
             <label for="locQuery">Location Query / Alias</label>
-            <input type="text" id="locQuery" value="Kolkata" placeholder="e.g. Salt Lake Kolkata, Meghalaya, London" autocomplete="off" />
-            <div class="input-hint">Auto-geocodes via Open-Meteo &amp; regional alias dictionary</div>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="locQuery" value="Kolkata" placeholder="Type city or place..." autocomplete="off" style="flex: 1;" />
+              <button type="button" class="btn-secondary" onclick="useLiveGeolocation()" title="Use my live GPS location" style="width: auto; padding: 0 12px;" id="gpsBtn">
+                <i data-lucide="locate" style="width: 16px; height: 16px;"></i>
+              </button>
+            </div>
+            <!-- Google-like Autocomplete Dropdown List -->
+            <div id="autocompleteList" style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: #ffffff; border: 1px solid var(--noaa-border); border-radius: 0 0 6px 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000; max-height: 220px; overflow-y: auto;"></div>
+            <div class="input-hint">Type to search globally or click target icon for live GPS</div>
           </div>
 
           <div class="coord-grid form-group">
@@ -1363,12 +1370,14 @@ Awaiting analysis audit trigger...
   <script>
     lucide.createIcons();
 
-    // Auto-detect whether running locally or on cloud
-    const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && window.location.port === '8000'
-      ? window.location.origin
-      : "https://veyra-v1-0.onrender.com";
-
+    const API_BASE = "https://veyra-v1-0.onrender.com";
     let activeToken = "veyra-public-client-token";
+
+    function escapeHtml(str) {
+      const div = document.createElement("div");
+      div.textContent = str;
+      return div.innerHTML;
+    }
 
     // 1. UTC Clock
     function updateUTCClock() {
@@ -1431,6 +1440,112 @@ Awaiting analysis audit trigger...
         if (document.getElementById('toggleRiskContours').checked) map.addLayer(riskContours);
         else map.removeLayer(riskContours);
       }
+    }
+
+    // --- Feature 1: Google-like Autocomplete ---
+    const locQueryInput = document.getElementById('locQuery');
+    const autocompleteList = document.getElementById('autocompleteList');
+    let autocompleteTimer = null;
+
+    if (locQueryInput && autocompleteList) {
+      locQueryInput.addEventListener('input', function() {
+        clearTimeout(autocompleteTimer);
+        const query = this.value.trim();
+        
+        if (query.length < 2) {
+          autocompleteList.style.display = 'none';
+          return;
+        }
+
+        autocompleteTimer = setTimeout(async () => {
+          try {
+            const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=6&language=en&format=json`;
+            const res = await fetch(url);
+            const data = await res.json();
+            
+            if (data.results && data.results.length > 0) {
+              autocompleteList.innerHTML = data.results.map(place => {
+                const subtitle = [place.admin1, place.country].filter(Boolean).join(', ');
+                return `
+                  <div class="autocomplete-item" onclick="selectAutocompletePlace(${place.latitude}, ${place.longitude}, '${escapeHtml(place.name)}', '${escapeHtml(subtitle)}')">
+                    <div style="font-weight: 600; color: var(--noaa-text);">${escapeHtml(place.name)}</div>
+                    <div style="font-size: 0.75rem; color: var(--noaa-muted);">${escapeHtml(subtitle)}</div>
+                  </div>
+                `;
+              }).join('');
+              
+              autocompleteList.querySelectorAll('.autocomplete-item').forEach(el => {
+                el.style.padding = '8px 12px';
+                el.style.cursor = 'pointer';
+                el.style.borderBottom = '1px solid #f0f0f0';
+                el.onmouseover = () => el.style.background = '#f5f8fc';
+                el.onmouseout = () => el.style.background = '#ffffff';
+              });
+
+              autocompleteList.style.display = 'block';
+            } else {
+              autocompleteList.style.display = 'none';
+            }
+          } catch (err) {
+            console.error("Autocomplete error:", err);
+            autocompleteList.style.display = 'none';
+          }
+        }, 300);
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!locQueryInput.contains(e.target) && !autocompleteList.contains(e.target)) {
+          autocompleteList.style.display = 'none';
+        }
+      });
+    }
+
+    function selectAutocompletePlace(lat, lon, name, subtitle) {
+      const fullName = subtitle ? `${name}, ${subtitle}` : name;
+      locQueryInput.value = fullName;
+      document.getElementById('latCoord').value = lat.toFixed(4);
+      document.getElementById('lonCoord').value = lon.toFixed(4);
+      autocompleteList.style.display = 'none';
+
+      map.flyTo([lat, lon], 8, { duration: 1.0 });
+      updateMarker(lat, lon, fullName, 'LOOKUP', '#0071bc');
+    }
+
+    // --- Feature 2: Live Browser Geolocation ---
+    function useLiveGeolocation() {
+      if (!navigator.geolocation) {
+        alert("Geolocation is not supported by your browser.");
+        return;
+      }
+
+      const gpsBtn = document.getElementById('gpsBtn');
+      if (gpsBtn) gpsBtn.disabled = true;
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
+          
+          document.getElementById('latCoord').value = lat.toFixed(4);
+          document.getElementById('lonCoord').value = lon.toFixed(4);
+          document.getElementById('locQuery').value = `Live GPS (${lat.toFixed(2)}°, ${lon.toFixed(2)}°)`;
+
+          if (gpsBtn) gpsBtn.disabled = false;
+
+          map.flyTo([lat, lon], 9, { duration: 1.2 });
+          updateMarker(lat, lon, "Your Live Location", "LIVE", "#10b981");
+        },
+        (error) => {
+          if (gpsBtn) gpsBtn.disabled = false;
+          switch(error.code) {
+            case error.PERMISSION_DENIED: alert("User denied the request for Geolocation."); break;
+            case error.POSITION_UNAVAILABLE: alert("Location information is unavailable."); break;
+            case error.TIMEOUT: alert("The request to get user location timed out."); break;
+            default: alert("An unknown geolocation error occurred."); break;
+          }
+        },
+        { timeout: 10000, maximumAge: 60000, enableHighAccuracy: true }
+      );
     }
 
     // 4. Forecast Horizon & Conformal Uncertainty Chart (Chart.js)
@@ -1522,18 +1637,14 @@ Awaiting analysis audit trigger...
       item.addEventListener('click', () => {
         const targetView = item.getAttribute('data-view');
 
-        // Toggle active views
         document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
         document.getElementById(`view-${targetView}`).classList.add('active');
 
-        // Toggle dropdown highlight
         document.querySelectorAll('.dropdown-content a').forEach(a => a.classList.remove('active'));
         item.classList.add('active');
 
-        // Update Breadcrumb
         document.getElementById('breadcrumbCurrent').innerText = viewTitleMap[targetView] || 'Research Tools';
 
-        // Specific view callbacks
         if (targetView === 'sentinel') {
           setTimeout(() => {
             map.invalidateSize();
@@ -1544,7 +1655,6 @@ Awaiting analysis audit trigger...
       });
     });
 
-    // Verification Panel Inner Tabs
     document.querySelectorAll('.panel-tabs button').forEach(btn => {
       btn.addEventListener('click', () => {
         const tabId = btn.getAttribute('data-vtab');
@@ -1571,14 +1681,14 @@ Awaiting analysis audit trigger...
         const res = await fetch(`${API_BASE}/health`);
         if (res.ok) {
           const h = await res.json();
-          document.getElementById('gatewayStatus').innerText = `GATEWAY LIVE (${h.version})`;
+          document.getElementById('healthStatus').innerText = `GATEWAY LIVE (${h.version})`;
         }
       } catch (e) {
-        document.getElementById('gatewayStatus').innerText = 'GATEWAY OFFLINE';
+        document.getElementById('healthStatus').innerText = 'GATEWAY OFFLINE';
       }
     }
 
-    // 8. Sentinel Audit Execution with Multi-Horizon Real Backend Calls
+    // 8. Sentinel Audit Execution
     async function executeSentinelAudit() {
       const btn = document.getElementById('btnAudit');
       btn.disabled = true;
@@ -1592,22 +1702,19 @@ Awaiting analysis audit trigger...
       activeToken = document.getElementById('apiKeyInput').value.trim();
 
       try {
-        // Geocode location if text name provided
-        if (loc && !loc.startsWith('Coordinates')) {
-          const resLoc = await fetch(`${API_BASE}/v1/location/resolve?query=${encodeURIComponent(loc)}`);
+        if (loc && !loc.startsWith('Coordinates') && !loc.startsWith('Live GPS')) {
+          const resLoc = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(loc)}&count=1&language=en&format=json`);
           if (resLoc.ok) {
             const locData = await resLoc.json();
-            lat = locData.latitude;
-            lon = locData.longitude;
-            document.getElementById('latCoord').value = lat;
-            document.getElementById('lonCoord').value = lon;
-            targetMarker.setLatLng([lat, lon]);
-            uncertaintyCircle.setLatLng([lat, lon]);
-            map.setView([lat, lon], 7);
+            if (locData.results && locData.results.length > 0) {
+              lat = locData.results[0].latitude;
+              lon = locData.results[0].longitude;
+              document.getElementById('latCoord').value = lat;
+              document.getElementById('lonCoord').value = lon;
+            }
           }
         }
 
-        // 1. Primary Single Prediction Request (Real Backend NWP + ML)
         const res = await fetch(`${API_BASE}/v1/predict`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-API-Key': activeToken },
@@ -1621,7 +1728,6 @@ Awaiting analysis audit trigger...
 
         const data = await res.json();
 
-        // 2. Parallel Real Batch Request across all horizons to populate chart with 100% real data
         const horizonPayload = {
           items: [24, 48, 72, 120, 240].map(h => ({
             location: loc || "Target",
@@ -1666,7 +1772,6 @@ Awaiting analysis audit trigger...
       document.getElementById('valConformalRange').innerText = `${d.conformal_lower}°C to ${d.conformal_upper}°C`;
       document.getElementById('valNoveltyScore').innerText = d.novelty_score.toFixed(3);
 
-      // Trust Pill State
       ['pillTrustState', 'pillTrustStateSidebar'].forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
@@ -1685,7 +1790,6 @@ Awaiting analysis audit trigger...
         if (el) el.innerText = d.provider_provenance;
       });
 
-      // Conformal Range Track Calculation
       document.getElementById('lblLower').innerText = `${d.conformal_lower}°C`;
       document.getElementById('lblUpper').innerText = `${d.conformal_upper}°C`;
       const median = ((d.conformal_lower + d.conformal_upper) / 2).toFixed(1);
@@ -1700,11 +1804,9 @@ Awaiting analysis audit trigger...
       document.getElementById('rangeFillBar').style.width = `${widthPct}%`;
       document.getElementById('rangeTargetPin').style.left = `${medianPct}%`;
 
-      // Dynamic map uncertainty circle radius
       const marginDeg = (d.conformal_upper - d.conformal_lower) / 2;
       uncertaintyCircle.setRadius(Math.max(marginDeg * 25000, 15000));
 
-      // Update Chart with Real Multi-Horizon Data from the Backend
       if (forecastChart && multiHorizonData && multiHorizonData.results) {
         const upperCurve = multiHorizonData.results.map(r => r.conformal_upper);
         const lowerCurve = multiHorizonData.results.map(r => r.conformal_lower);
@@ -1718,7 +1820,6 @@ Awaiting analysis audit trigger...
         forecastChart.update();
       }
 
-      // Evidence Trace Output
       document.getElementById('evidenceTrace').innerHTML = `
 [AUDIT-LOG ${new Date().toISOString()}]
 • TARGET LOCATION      : ${d.location}
@@ -1772,7 +1873,7 @@ Awaiting analysis audit trigger...
       document.getElementById('batchSummaryStats').innerText = `${results.length} Items Processed`;
     }
 
-    // 10. Batch Async Dispatch & Polling
+    // 10. Batch Async Dispatch
     async function executeAsyncJob() {
       const btn = document.getElementById('btnAsyncJob');
       activeToken = document.getElementById('apiKeyInput').value.trim();
