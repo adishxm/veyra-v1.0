@@ -6,7 +6,7 @@ client = TestClient(app)
 AUTH_HEADERS = {"X-API-Key": "veyra-public-client-token"}
 
 GOLDEN_LOCATIONS = [
-    # Polar & Extreme Cold
+    # Polar & Extreme Cold (Antarctic late-winter to early-spring envelope)
     {"name": "South Pole Plateau", "lat": -82.5, "lon": 0.0, "lead": 48, "min_temp": -70.0, "max_temp": -30.0},
     {"name": "Tromso Arctic", "lat": 69.65, "lon": 18.95, "lead": 48, "min_temp": 2.0, "max_temp": 18.0},
     {"name": "Svalbard", "lat": 78.22, "lon": 15.65, "lead": 48, "min_temp": 0.0, "max_temp": 15.0},
