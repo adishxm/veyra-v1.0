@@ -9,6 +9,9 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
+  <!-- Esri Leaflet (Powers official NOAA WPC MapServer charts) -->
+  <script src="https://unpkg.com/esri-leaflet@3.0.12/dist/esri-leaflet.js"></script>
+
   <!-- Fonts & Icons -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1058,24 +1061,24 @@
         <div class="map-panel">
           <div id="sentinelMap"></div>
 
-          <!-- Comprehensive Meteorological Layer Toggles -->
+          <!-- Official NOAA WPC Meteorological Layer Toggles -->
           <div class="layer-toggles">
-            <label style="font-weight:700; margin-bottom:2px; color:var(--noaa-dark-blue);">Map Overlays</label>
+            <label style="font-weight:700; margin-bottom:2px; color:var(--noaa-dark-blue);">Map Layers</label>
+            <label>
+              <input type="checkbox" id="toggleWpcChart" checked onchange="toggleMapLayer('wpcChart')">
+              NOAA WPC Synoptic Chart (Fronts, Highs, Lows)
+            </label>
+            <label>
+              <input type="checkbox" id="toggleWeatherRadar" onchange="toggleMapLayer('weatherRadar')">
+              Live Global Radar &amp; Precip
+            </label>
             <label>
               <input type="checkbox" id="toggleUncertaintyCircle" checked onchange="toggleMapLayer('uncertaintyCircle')">
-              Uncertainty Circle
+              Conformal Uncertainty Area
             </label>
             <label>
               <input type="checkbox" id="toggleTargetMarker" checked onchange="toggleMapLayer('targetMarker')">
               Target Marker
-            </label>
-            <label>
-              <input type="checkbox" id="toggleRiskContours" checked onchange="toggleMapLayer('riskContours')">
-              Dynamic Risk Zone (Real Polygon)
-            </label>
-            <label>
-              <input type="checkbox" id="toggleWeatherRadar" onchange="toggleMapLayer('weatherRadar')">
-              Live Global Radar &amp; Precip (WMS)
             </label>
           </div>
 
@@ -1085,10 +1088,10 @@
               <span class="legend-color" style="background: #0071bc;"></span> Target Location
             </div>
             <div class="legend-item">
-              <span class="legend-color" style="background: #38bdf8;"></span> Conformal Uncertainty
+              <span class="legend-color" style="background: #38bdf8;"></span> Conformal Margin
             </div>
             <div class="legend-item">
-              <span class="legend-color" style="background: #cd2026;"></span> High Risk Zone (Active Polygon)
+              <span class="legend-color" style="background: #10b981;"></span> Real NOAA Forecast Stream
             </div>
           </div>
         </div>
@@ -1406,31 +1409,35 @@ Awaiting analysis audit trigger...
     }
     updateActiveRoleBadge();
 
-    // 3. Map Initialization & Layer Setup
-    const map = L.map('sentinelMap', { zoomControl: true }).setView([22.5726, 88.3639], 5);
+    // 3. Map Initialization & Real NOAA Meteorological Layers
+    const map = L.map('sentinelMap', { zoomControl: true }).setView([38.5, -96.0], 4);
+    
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 18,
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    let targetMarker = L.marker([22.5726, 88.3639]).addTo(map);
-    let uncertaintyCircle = L.circle([22.5726, 88.3639], {
+    // Official Real-Time NOAA WPC National Forecast Chart Stream
+    const wpcChartLayer = L.esri.dynamicMapLayer({
+      url: 'https://mapservices.weather.noaa.gov/vector/rest/services/weather_prediction_center/wpc_national_forecast_chart/MapServer',
+      opacity: 0.85,
+      f: 'image'
+    }).addTo(map);
+
+    // Live Global Radar & Precipitation Overlay
+    const liveWeatherRadarLayer = L.tileLayer('https://tilecache.rainviewer.com/v2/radar/nowcast_latest/512/{z}/{x}/{y}/2/1_1.png', {
+      opacity: 0.65,
+      maxZoom: 18,
+      attribution: '&copy; Global Radar / RainViewer'
+    });
+
+    let targetMarker = L.marker([38.5, -96.0]).addTo(map);
+    let uncertaintyCircle = L.circle([38.5, -96.0], {
       radius: 85000,
       color: '#0071bc',
       fillColor: '#38bdf8',
       fillOpacity: 0.18
     }).addTo(map);
-
-    // Dynamic Irregular Real-Time Meteorological Warning Polygon Layer
-    let riskContours = L.layerGroup();
-    riskContours.addTo(map);
-
-    // Live Global Weather Radar / Precipitation Overlay (WMS / Tile Feed)
-    const liveWeatherRadarLayer = L.tileLayer('https://tilecache.rainviewer.com/v2/radar/nowcast_latest/512/{z}/{x}/{y}/2/1_1.png', {
-      opacity: 0.65,
-      maxZoom: 18,
-      attribution: '&copy; Global Radar / Weather Services'
-    });
 
     map.on('click', e => {
       document.getElementById('latCoord').value = e.latlng.lat.toFixed(4);
@@ -1441,18 +1448,18 @@ Awaiting analysis audit trigger...
     });
 
     function toggleMapLayer(layerName) {
-      if (layerName === 'uncertaintyCircle') {
+      if (layerName === 'wpcChart') {
+        if (document.getElementById('toggleWpcChart').checked) map.addLayer(wpcChartLayer);
+        else map.removeLayer(wpcChartLayer);
+      } else if (layerName === 'weatherRadar') {
+        if (document.getElementById('toggleWeatherRadar').checked) map.addLayer(liveWeatherRadarLayer);
+        else map.removeLayer(liveWeatherRadarLayer);
+      } else if (layerName === 'uncertaintyCircle') {
         if (document.getElementById('toggleUncertaintyCircle').checked) map.addLayer(uncertaintyCircle);
         else map.removeLayer(uncertaintyCircle);
       } else if (layerName === 'targetMarker') {
         if (document.getElementById('toggleTargetMarker').checked) map.addLayer(targetMarker);
         else map.removeLayer(targetMarker);
-      } else if (layerName === 'riskContours') {
-        if (document.getElementById('toggleRiskContours').checked) map.addLayer(riskContours);
-        else map.removeLayer(riskContours);
-      } else if (layerName === 'weatherRadar') {
-        if (document.getElementById('toggleWeatherRadar').checked) map.addLayer(liveWeatherRadarLayer);
-        else map.removeLayer(liveWeatherRadarLayer);
       }
     }
 
@@ -1529,7 +1536,7 @@ Awaiting analysis audit trigger...
       document.getElementById('lonCoord').value = lon.toFixed(4);
       autocompleteList.style.display = 'none';
 
-      map.flyTo([lat, lon], 8, { duration: 1.0 });
+      map.flyTo([lat, lon], 7, { duration: 1.0 });
       targetMarker.setLatLng([lat, lon]);
       uncertaintyCircle.setLatLng([lat, lon]);
     }
@@ -1555,7 +1562,7 @@ Awaiting analysis audit trigger...
 
           if (gpsBtn) gpsBtn.disabled = false;
 
-          map.flyTo([lat, lon], 9, { duration: 1.2 });
+          map.flyTo([lat, lon], 8, { duration: 1.2 });
           targetMarker.setLatLng([lat, lon]);
           uncertaintyCircle.setLatLng([lat, lon]);
         },
@@ -1813,32 +1820,6 @@ Awaiting analysis audit trigger...
       const marginDeg = (d.conformal_upper - d.conformal_lower) / 2;
       uncertaintyCircle.setLatLng([lat, lon]);
       uncertaintyCircle.setRadius(Math.max(marginDeg * 25000, 15000));
-
-      // Dynamic Data-Driven Multi-Vertex Meteorological Warning Polygon
-      riskContours.clearLayers();
-      if (d.bust_probability >= 0.40 || d.risk_level === 'HIGH' || d.risk_level === 'CRITICAL') {
-        const latSpread = Math.max(marginDeg * 0.6, 0.25);
-        const lonSpread = Math.max(marginDeg * 0.8 * (1.0 + d.bust_probability), 0.35);
-
-        const polygonCoords = [
-          [lat + latSpread * 1.25, lon - lonSpread * 0.85],
-          [lat + latSpread * 1.45, lon + lonSpread * 1.05],
-          [lat + latSpread * 0.25, lon + lonSpread * 1.55],
-          [lat - latSpread * 1.05, lon + lonSpread * 1.25],
-          [lat - latSpread * 1.35, lon - lonSpread * 0.35],
-          [lat - latSpread * 0.75, lon - lonSpread * 1.35]
-        ];
-
-        const riskPolygon = L.polygon(polygonCoords, {
-          color: '#cd2026',
-          weight: 2.5,
-          fillColor: '#ef4444',
-          fillOpacity: 0.38,
-          dashArray: '4, 4'
-        }).bindPopup(`<b>Data-Driven Weather Warning Polygon</b><br>Target: ${d.location}<br>Conformal Margin: Δ ${marginDeg.toFixed(2)}°C<br>Bust Odds: ${(d.bust_probability * 100).toFixed(1)}%<br>Tier: ${d.risk_level}`);
-        
-        riskContours.addLayer(riskPolygon);
-      }
 
       document.getElementById('evidenceTrace').innerHTML = `
 [AUDIT-LOG ${new Date().toISOString()}]
