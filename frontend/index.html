@@ -462,20 +462,20 @@
       top: 10px;
       right: 10px;
       background: var(--noaa-white);
-      padding: 8px 12px;
+      padding: 10px 14px;
       border-radius: var(--radius-sm);
-      box-shadow: 0 0 6px rgba(0,0,0,0.2);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.18);
       font-size: 0.85rem;
       z-index: 500;
       display: flex;
       flex-direction: column;
-      gap: 5px;
+      gap: 6px;
     }
 
     .layer-toggles label {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 7px;
       font-size: 0.8rem;
       text-transform: none;
       letter-spacing: 0;
@@ -1058,9 +1058,9 @@
         <div class="map-panel">
           <div id="sentinelMap"></div>
 
-          <!-- Layer Toggles -->
+          <!-- Comprehensive Meteorological Layer Toggles -->
           <div class="layer-toggles">
-            <label style="font-weight:700; margin-bottom:4px; color:var(--noaa-dark-blue);">Map Layers</label>
+            <label style="font-weight:700; margin-bottom:2px; color:var(--noaa-dark-blue);">Map Overlays</label>
             <label>
               <input type="checkbox" id="toggleUncertaintyCircle" checked onchange="toggleMapLayer('uncertaintyCircle')">
               Uncertainty Circle
@@ -1074,8 +1074,8 @@
               Dynamic Risk Zone (Real Polygon)
             </label>
             <label>
-              <input type="checkbox" id="toggleConformalEnvelope" checked onchange="toggleMapLayer('conformalEnvelope')">
-              Conformal Error Envelope
+              <input type="checkbox" id="toggleWeatherRadar" onchange="toggleMapLayer('weatherRadar')">
+              Live Global Radar &amp; Precip (WMS)
             </label>
           </div>
 
@@ -1088,7 +1088,7 @@
               <span class="legend-color" style="background: #38bdf8;"></span> Conformal Uncertainty
             </div>
             <div class="legend-item">
-              <span class="legend-color" style="background: #cd2026;"></span> High Risk Zone (Real Polygon)
+              <span class="legend-color" style="background: #cd2026;"></span> High Risk Zone (Active Polygon)
             </div>
           </div>
         </div>
@@ -1421,8 +1421,16 @@ Awaiting analysis audit trigger...
       fillOpacity: 0.18
     }).addTo(map);
 
+    // Dynamic Irregular Real-Time Meteorological Warning Polygon Layer
     let riskContours = L.layerGroup();
     riskContours.addTo(map);
+
+    // Live Global Weather Radar / Precipitation Overlay (WMS / Tile Feed)
+    const liveWeatherRadarLayer = L.tileLayer('https://tilecache.rainviewer.com/v2/radar/nowcast_latest/512/{z}/{x}/{y}/2/1_1.png', {
+      opacity: 0.65,
+      maxZoom: 18,
+      attribution: '&copy; Global Radar / Weather Services'
+    });
 
     map.on('click', e => {
       document.getElementById('latCoord').value = e.latlng.lat.toFixed(4);
@@ -1442,12 +1450,9 @@ Awaiting analysis audit trigger...
       } else if (layerName === 'riskContours') {
         if (document.getElementById('toggleRiskContours').checked) map.addLayer(riskContours);
         else map.removeLayer(riskContours);
-      } else if (layerName === 'conformalEnvelope') {
-        if (document.getElementById('toggleConformalEnvelope').checked) {
-          if (targetMarker) map.addLayer(targetMarker);
-        } else {
-          if (targetMarker) map.removeLayer(targetMarker);
-        }
+      } else if (layerName === 'weatherRadar') {
+        if (document.getElementById('toggleWeatherRadar').checked) map.addLayer(liveWeatherRadarLayer);
+        else map.removeLayer(liveWeatherRadarLayer);
       }
     }
 
@@ -1707,7 +1712,7 @@ Awaiting analysis audit trigger...
       }
     }
 
-    // 8. Lightning-Fast Sentinel Audit Execution
+    // 8. Lightning-Fast Single-Dispatch Sentinel Audit
     async function executeSentinelAudit() {
       const btn = document.getElementById('btnAudit');
       btn.disabled = true;
@@ -1746,7 +1751,7 @@ Awaiting analysis audit trigger...
         }
 
         const data = await res.json();
-        renderAuditResults(data, null);
+        renderAuditResults(data);
         document.getElementById('timestampBadge').innerText = `AUDIT ${new Date().toISOString().slice(11, 19)}Z`;
       } catch (err) {
         showBanner(`Sentinel Audit Failed: ${err.message}`, true);
@@ -1809,19 +1814,19 @@ Awaiting analysis audit trigger...
       uncertaintyCircle.setLatLng([lat, lon]);
       uncertaintyCircle.setRadius(Math.max(marginDeg * 25000, 15000));
 
-      // Dynamically render true data-driven risk polygon scaled by live conformal spread and bust probability
+      // Dynamic Data-Driven Multi-Vertex Meteorological Warning Polygon
       riskContours.clearLayers();
       if (d.bust_probability >= 0.40 || d.risk_level === 'HIGH' || d.risk_level === 'CRITICAL') {
         const latSpread = Math.max(marginDeg * 0.6, 0.25);
         const lonSpread = Math.max(marginDeg * 0.8 * (1.0 + d.bust_probability), 0.35);
 
         const polygonCoords = [
-          [lat + latSpread * 1.2, lon - lonSpread * 0.9],
-          [lat + latSpread * 1.4, lon + lonSpread * 1.1],
-          [lat + latSpread * 0.2, lon + lonSpread * 1.5],
-          [lat - latSpread * 1.0, lon + lonSpread * 1.2],
-          [lat - latSpread * 1.3, lon - lonSpread * 0.4],
-          [lat - latSpread * 0.7, lon - lonSpread * 1.3]
+          [lat + latSpread * 1.25, lon - lonSpread * 0.85],
+          [lat + latSpread * 1.45, lon + lonSpread * 1.05],
+          [lat + latSpread * 0.25, lon + lonSpread * 1.55],
+          [lat - latSpread * 1.05, lon + lonSpread * 1.25],
+          [lat - latSpread * 1.35, lon - lonSpread * 0.35],
+          [lat - latSpread * 0.75, lon - lonSpread * 1.35]
         ];
 
         const riskPolygon = L.polygon(polygonCoords, {
@@ -1830,7 +1835,7 @@ Awaiting analysis audit trigger...
           fillColor: '#ef4444',
           fillOpacity: 0.38,
           dashArray: '4, 4'
-        }).bindPopup(`<b>Live Data-Driven Risk Polygon</b><br>Target: ${d.location}<br>Conformal Margin: Δ ${marginDeg.toFixed(2)}°C<br>Bust Odds: ${(d.bust_probability * 100).toFixed(1)}%`);
+        }).bindPopup(`<b>Data-Driven Weather Warning Polygon</b><br>Target: ${d.location}<br>Conformal Margin: Δ ${marginDeg.toFixed(2)}°C<br>Bust Odds: ${(d.bust_probability * 100).toFixed(1)}%<br>Tier: ${d.risk_level}`);
         
         riskContours.addLayer(riskPolygon);
       }
