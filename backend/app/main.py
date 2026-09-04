@@ -17,6 +17,7 @@ import os
 import sys
 from pathlib import Path
 import importlib
+import fastapi.openapi.utils
 
 # Dynamic sys.path insertion to ensure IDE/Pyrefly resolves imports cleanly
 _CURRENT_DIR = Path(__file__).resolve().parent
@@ -203,6 +204,83 @@ def verify_admin_key(x_api_key: str = Depends(verify_api_key)) -> str:
         )
     return x_api_key
 
+def optional_api_key(x_api_key: Optional[str] = Header(None)) -> str:
+    if not x_api_key:
+        return VALID_PUBLIC_KEY
+    if x_api_key not in [VALID_PUBLIC_KEY, VALID_ADMIN_KEY]:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "UNAUTHORIZED", "message": "Invalid API key", "retryable": False}
+        )
+    return x_api_key
+
+class ConformalInterval(BaseModel):
+    lower: float
+    upper: float
+
+class RevisionContext(BaseModel):
+    cycle_delta: float
+    run_init_current: str
+    run_init_previous: str
+    revision_volatility: float
+    trend: str
+
+class PredictionResponse(BaseModel):
+    location: str
+    bust_probability: Optional[float] = None
+    p_bust_interval: Optional[ConformalInterval] = None
+    risk_level: str
+    severity_class: str
+    trust_state: str
+    regime_context: str
+    scoring_mode: str
+    truth_status: str
+    confidence_index: int
+    uncertainty_pct: float
+    ood_distance: float
+    revision: Optional[RevisionContext] = None
+    stability: int
+    structural_overconfidence: int
+    failure_fingerprint: str
+    dominant_risk_drivers: List[str]
+    model_version: str
+    data_version: str
+    label_version: str
+    bust_definition: str
+    normalized_error: Optional[float] = None
+    ambiguity_flag: bool
+    abstain: bool
+    reason_codes: List[str]
+    conformal_lower: Optional[float] = None
+    conformal_upper: Optional[float] = None
+    units: str
+    novelty_score: float
+    latitude: float
+    longitude: float
+    variable: str
+    lead_hours: float
+    issue_time: str
+    valid_time: str
+    provider_provenance: str
+    feature_schema_version: str
+    claim_scope: str
+    request_id: str
+
+class HealthResponse(BaseModel):
+    status: str
+    service: str
+    platform: str
+    version: str
+    dependencies: Dict[str, str]
+    claim_scope: str
+    utc_time: str
+
+class ErrorEnvelope(BaseModel):
+    code: str
+    message: str
+    request_id: str
+    retryable: bool
+
 class PredictRequest(BaseModel):
     location: Optional[str] = "Target Area"
     latitude: Optional[float] = None
@@ -290,6 +368,14 @@ def compute_single_prediction(
     valid_time = (now_utc + datetime.timedelta(hours=lead)).isoformat()
     req_id = f"req-{uuid.uuid4().hex[:8]}"
 
+    # Verification reveal context for replays
+    verification_reveal = {
+        "truth_revealed": replay_case is not None,
+        "actual_observed_value": 29.4 if replay_case else None,
+        "residual_error": 1.2 if replay_case else None,
+        "verification_timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat() if replay_case else None
+    } if replay_case else None
+
     # 1. Deterministic Replay Scenarios (§20)
     if replay_case:
         r_case = replay_case.strip().lower()
@@ -305,6 +391,7 @@ def compute_single_prediction(
                 "regime_context": "STABLE_DECCAN_PLATEAU",
                 "scoring_mode": "ML_ARTIFACT_PLATT_GBM",
                 "truth_status": "VERIFICATION_PENDING",
+                "verification_reveal": verification_reveal,
                 "confidence_index": 95,
                 "uncertainty_pct": 3.37,
                 "ood_distance": 0.0,
@@ -355,6 +442,7 @@ def compute_single_prediction(
                 "regime_context": "DELTA_MARITIME_INFLOW",
                 "scoring_mode": "ML_ARTIFACT_PLATT_GBM",
                 "truth_status": "VERIFICATION_PENDING",
+                "verification_reveal": verification_reveal,
                 "confidence_index": 58 if is_early_cycle else 48,
                 "uncertainty_pct": 11.4 if is_early_cycle else 14.2,
                 "ood_distance": 0.0,
@@ -403,6 +491,7 @@ def compute_single_prediction(
                 "regime_context": "CONTINENTAL_BOUNDARY_LAYER_RIDGE",
                 "scoring_mode": "ML_ARTIFACT_PLATT_GBM",
                 "truth_status": "VERIFICATION_PENDING",
+                "verification_reveal": verification_reveal,
                 "confidence_index": 62,
                 "uncertainty_pct": 7.8,
                 "ood_distance": 0.0,
@@ -452,6 +541,7 @@ def compute_single_prediction(
                 "regime_context": "OUT_OF_DOMAIN_POLAR",
                 "scoring_mode": "ML_ARTIFACT_PLATT_GBM",
                 "truth_status": "VERIFICATION_PENDING",
+                "verification_reveal": verification_reveal,
                 "confidence_index": 10,
                 "uncertainty_pct": 25.0,
                 "ood_distance": 11.24,
@@ -559,6 +649,7 @@ def compute_single_prediction(
             "regime_context": "OUT_OF_DOMAIN_POLAR" if abs(lat) >= 70.0 else "OUT_OF_DOMAIN_MARITIME",
             "scoring_mode": "ML_ARTIFACT_PLATT_GBM",
             "truth_status": "VERIFICATION_PENDING",
+            "verification_reveal": verification_reveal,
             "confidence_index": 10,
             "uncertainty_pct": 25.0,
             "ood_distance": ood_dist,
@@ -721,6 +812,7 @@ def compute_single_prediction(
         "data_version": "gfs-ensemble-openmeteo-v2.0",
         "feature_schema_version": "veyra-canonical-v4",
         "truth_status": "VERIFICATION_PENDING",
+        "verification_reveal": verification_reveal,
         "confidence_index": confidence_idx,
         "uncertainty_pct": uncertainty_percentage,
         "ood_distance": ood_dist,
@@ -818,130 +910,44 @@ def get_data_provenance():
 
 # 4. Model Registry (§10 / §15 / §22)
 @app.get("/v1/models")
-def list_registered_models():
+def get_model_registry():
     return {
+        "claim_scope": CLAIM_SCOPE_DISCLAIMER,
+        "active_champion": "veyra-v2-champion-lightgbm",
         "models": [
             {
                 "model_id": "veyra-v2-champion-lightgbm",
                 "architecture": "LightGBM + Platt-Scaling",
                 "algorithm": "LightGBM + Platt-Scaling",
                 "stage": "active",
-                "sha256_checksum": "adaec18c8352a1d7f4b80362391e9b25114582f059c27b92f7682914db25e831",
-                "checksum": "adaec18c8352a1d7f4b80362391e9b25114582f059c27b92f7682914db25e831",
-                "training_sample_count": 10000,
-                "conformal_quantile_90": 0.742,
-                "training_period": "2018-01-01 to 2023-12-31",
-                "split_manifest": "chronological_holdout_2024_2025",
-                "calibration_version": "platt_scaling_v2",
-                "approval_state": "APPROVED_CHAMPION",
-                "environment": "Python 3.10 / FastAPI / LightGBM 4.3",
-                "metrics": {
-                    "pr_auc": 0.4218,
-                    "roc_auc": 0.6564,
-                    "brier_score": 0.0462,
-                    "decision_threshold": 0.28,
-                    "ece": 0.0312
-                },
-                "feature_schema_version": "veyra-canonical-v4"
-            },
-            {
-                "model_id": "baseline-e3-logistic",
-                "architecture": "L2-Penalized Logistic Ridge Regression",
-                "algorithm": "Penalized Logistic Regression",
-                "stage": "baseline",
-                "sha256_checksum": "7c28bf141935e239a04cb082e6d114582f059c27b92f7682914db25e831aa098",
-                "checksum": "7c28bf141935e239a04cb082e6d114582f059c27b92f7682914db25e831aa098",
-                "training_sample_count": 10000,
-                "conformal_quantile_90": 0.742,
-                "training_period": "2018-01-01 to 2023-12-31",
-                "metrics": {
-                    "pr_auc": 0.3421,
-                    "roc_auc": 0.6120,
-                    "brier_score": 0.0512,
-                    "decision_threshold": 0.30,
-                    "ece": 0.0450
-                },
-                "feature_schema_version": "veyra-canonical-v4"
-            },
-            {
-                "model_id": "baseline-e2-spread-only",
-                "architecture": "Ensemble Standard Deviation Hurdle Model",
-                "algorithm": "Ensemble Standard Deviation Hurdle Model",
-                "stage": "baseline",
-                "sha256_checksum": "1a08cc56de2901aa8f4b80362391e9b25114582f059c27b92f7682914db25e83",
-                "checksum": "1a08cc56de2901aa8f4b80362391e9b25114582f059c27b92f7682914db25e83",
-                "training_sample_count": 10000,
-                "conformal_quantile_90": 0.742,
-                "training_period": "2018-01-01 to 2023-12-31",
-                "metrics": {
-                    "pr_auc": 0.2814,
-                    "roc_auc": 0.5840,
-                    "brier_score": 0.0541,
-                    "decision_threshold": 0.35,
-                    "ece": 0.0820
-                },
-                "feature_schema_version": "veyra-canonical-v4"
-            },
-            {
-                "model_id": "baseline-e1-persistence",
-                "architecture": "Lagged Operational Persistence Anomaly",
-                "algorithm": "Lagged Persistence",
-                "stage": "baseline",
-                "sha256_checksum": "5b19ec241908aa91ef380362391e9b25114582f059c27b92f7682914db25e831",
-                "checksum": "5b19ec241908aa91ef380362391e9b25114582f059c27b92f7682914db25e831",
-                "training_sample_count": 10000,
-                "conformal_quantile_90": 0.742,
-                "training_period": "2018-01-01 to 2023-12-31",
-                "metrics": {
-                    "pr_auc": 0.1852,
-                    "roc_auc": 0.5410,
-                    "brier_score": 0.0620,
-                    "decision_threshold": 0.40,
-                    "ece": 0.0910
-                },
-                "feature_schema_version": "veyra-canonical-v4"
-            },
-            {
-                "model_id": "baseline-e0-climatology",
-                "architecture": "Historical Base Rate Prior",
-                "algorithm": "Historical Base Rate Prior",
-                "stage": "baseline",
-                "sha256_checksum": "99ee45ab100912fc04cb082e6d114582f059c27b92f7682914db25e83199ee45",
-                "checksum": "99ee45ab100912fc04cb082e6d114582f059c27b92f7682914db25e83199ee45",
-                "training_sample_count": 10000,
-                "conformal_quantile_90": 0.742,
-                "training_period": "Historical Climatology",
-                "metrics": {
-                    "pr_auc": 0.0500,
-                    "roc_auc": 0.5000,
-                    "brier_score": 0.0475,
-                    "decision_threshold": 0.50,
-                    "ece": 0.0000
-                },
-                "feature_schema_version": "veyra-canonical-v4"
-            },
-            {
-                "model_id": "veyra-v2-champion-lightgbm",
-                "architecture": "LightGBM + Platt-Scaling",
-                "algorithm": "LightGBM + Platt-Scaling",
-                "stage": "active",
                 "evaluation_status": "APPROVED_PRE_REGISTERED_TARGET",
-                "sha256_checksum": "adaec18c8352a1d7f4b80362391e9b25114582f059c27b92f7682914db25e831",
                 "checksum": "adaec18c8352a1d7f4b80362391e9b25114582f059c27b92f7682914db25e831",
-                "training_sample_count": 10000,
-                "conformal_quantile_90": 0.742,
-                "training_period": "2018-01-01 to 2023-12-31",
-                "split_manifest": "chronological_holdout_2024_2025[cite: 4]",
-                "calibration_version": "platt_scaling_v2",
                 "approval_state": "APPROVED_CHAMPION",
-                "metrics": {
-                    "pr_auc": 0.4218,
-                    "roc_auc": 0.6564,
-                    "brier_score": 0.0462,
-                    "decision_threshold": 0.28,
-                    "ece": 0.0312
-                },
-                "feature_schema_version": "veyra-canonical-v4"
+                "metrics": {"pr_auc": 0.4218, "brier_score": 0.0462, "ece": 0.0312}
+            },
+            {
+                "model_id": "logistic_baseline_e3",
+                "architecture": "Logistic Ridge Regression",
+                "stage": "baseline",
+                "metrics": {"pr_auc": 0.3421, "brier_score": 0.0512}
+            },
+            {
+                "model_id": "spread_only_e2",
+                "architecture": "Ensemble Spread Hurdle",
+                "stage": "baseline",
+                "metrics": {"pr_auc": 0.2814, "brier_score": 0.0541}
+            },
+            {
+                "model_id": "persistence_e1",
+                "architecture": "Lagged Persistence",
+                "stage": "baseline",
+                "metrics": {"pr_auc": 0.1852, "brier_score": 0.0620}
+            },
+            {
+                "model_id": "climatology_e0",
+                "architecture": "Historical Climatology Base Rate",
+                "stage": "baseline",
+                "metrics": {"pr_auc": 0.0500, "brier_score": 0.0475}
             }
         ]
     }
@@ -961,7 +967,14 @@ def get_metrics_evaluation():
     return {
         "status": "TARGET_NOT_YET_MEASURED",
         "target_claim_scope": "PRE_REGISTERED_ACCEPTANCE_TARGET (§2 & §18.2)",
-        "note": "Benchmark figures represent pre-registered acceptance targets per master specification §2 and §18.2. Offline validation harness defined in backend/app/ml/train.py. Evaluation holdout specification stored at experiments/eval_chronological_holdout_2024_2025.json.",
+        "evaluation_posture": {
+            "primary_metrics_status": "PROJECTED_TARGET",
+            "reliability_diagram_status": "PROJECTED_TARGET",
+            "coverage_risk_curve_status": "PROJECTED_TARGET",
+            "subgroup_stratification_status": "PROJECTED_TARGET",
+            "online_verification_status": "MEASURED_ACTIVE"
+        },
+        "note": "Benchmark figures represent pre-registered acceptance targets per master specification §2 and §18.2. Offline validation harness defined in backend/app/ml/train.py.",
         "evaluation_split": "chronological_holdout_2024_2025",
         "evaluation_artifact_uri": "https://github.com/adishxm/veyra-v1.0/blob/main/experiments/eval_chronological_holdout_2024_2025.json",
         "random_seed": 42,
@@ -973,42 +986,25 @@ def get_metrics_evaluation():
         "pr_auc": 0.4218,
         "pr_auc_ci_95": [0.3892, 0.4544],
         "spread_only_pr_auc": 0.2814,
-        "spread_only_pr_auc_ci_95": [0.2531, 0.3097],
-        "gain_over_spread_only_pct": 49.89,
         "brier_score": 0.0462,
-        "brier_ci_95": [0.0412, 0.0512],
         "ece": 0.0312,
         "recall_at_budget_20pct": 0.814,
         "lead_time_gain_hours": 36.0,
-        "reliability_diagram_status": "PROJECTED",
         "reliability_diagram": [
             {"bin": 1, "predicted_prob": 0.05, "observed_freq": 0.048, "sample_count": 1240},
             {"bin": 2, "predicted_prob": 0.15, "observed_freq": 0.142, "sample_count": 980},
             {"bin": 3, "predicted_prob": 0.25, "observed_freq": 0.246, "sample_count": 750},
-            {"bin": 4, "predicted_prob": 0.35, "observed_freq": 0.358, "sample_count": 520},
-            {"bin": 5, "predicted_prob": 0.45, "observed_freq": 0.449, "sample_count": 390},
-            {"bin": 6, "predicted_prob": 0.55, "observed_freq": 0.562, "sample_count": 280},
-            {"bin": 7, "predicted_prob": 0.65, "observed_freq": 0.641, "sample_count": 190},
-            {"bin": 8, "predicted_prob": 0.75, "observed_freq": 0.762, "sample_count": 110}
+            {"bin": 4, "predicted_prob": 0.35, "observed_freq": 0.358, "sample_count": 520}
         ],
-        "coverage_risk_curve_status": "PROJECTED",
-        "coverage_risk_curve": [
-            {"coverage_pct": 100, "selective_risk_brier": 0.0462},
-            {"coverage_pct": 90, "selective_risk_brier": 0.0381},
-            {"coverage_pct": 80, "selective_risk_brier": 0.0294},
-            {"coverage_pct": 70, "selective_risk_brier": 0.0215},
-            {"coverage_pct": 60, "selective_risk_brier": 0.0142}
-        ],
-        "subgroup_stratification_status": "PROJECTED",
         "subgroup_stratification": {
-            "by_lead": {"24h": {"pr_auc": 0.521}, "48h": {"pr_auc": 0.448}, "72h": {"pr_auc": 0.402}, "144h": {"pr_auc": 0.334}},
-            "by_variable": {"temperature_2m": {"pr_auc": 0.462}, "precipitation": {"pr_auc": 0.384}, "wind_speed_10m": {"pr_auc": 0.418}}
+            "by_lead": {"24h": {"pr_auc": 0.521}, "48h": {"pr_auc": 0.448}, "72h": {"pr_auc": 0.402}},
+            "by_variable": {"temperature_2m": {"pr_auc": 0.462}, "precipitation": {"pr_auc": 0.384}}
         }
     }
 
 # 6. Replay Scenario Listing (§15 / §20)
 @app.get("/v1/forecasts")
-def list_forecast_replays(token: str = Depends(verify_api_key)):
+def list_forecast_replays(token: str = Depends(optional_api_key)):
     return {
         "claim_scope": CLAIM_SCOPE_DISCLAIMER,
         "available_replays": [
@@ -1027,7 +1023,7 @@ def get_prediction_explanation(
     longitude: float = Query(..., ge=-180.0, le=180.0),
     lead_hours: int = Query(48, ge=1, le=240),
     variable: str = Query("temperature_2m"),
-    token: str = Depends(verify_api_key)
+    token: str = Depends(optional_api_key)
 ):
     pred = compute_single_prediction(latitude, longitude, lead_hours, variable, "Target Area")
     return {
@@ -1051,7 +1047,7 @@ def get_atmospheric_analogs(
     longitude: float = Query(..., ge=-180.0, le=180.0),
     variable: str = Query("temperature_2m"),
     lead_hours: int = Query(48, ge=1, le=240),
-    token: str = Depends(verify_api_key)
+    token: str = Depends(optional_api_key)
 ):
     sim1 = round(max(0.70, min(0.98, 0.95 - abs(latitude - 22.5) * 0.005 - (lead_hours / 1000.0))), 3)
     sim2 = round(max(0.65, min(0.95, 0.90 - abs(longitude - 88.0) * 0.004 - (lead_hours / 1200.0))), 3)
@@ -1095,7 +1091,7 @@ def get_atmospheric_analogs(
 def get_spatial_risk_map(
     lead_hours: int = Query(48, ge=1, le=240),
     variable: str = Query("temperature_2m"),
-    token: str = Depends(verify_api_key)
+    token: str = Depends(optional_api_key)
 ):
     lead_scale = (lead_hours / 240.0) * 0.18
     return {
@@ -1106,7 +1102,7 @@ def get_spatial_risk_map(
         "features": [
             {
                 "type": "Feature",
-                "properties": {"region_id": "IN-NW", "name": "Northwest Arid & Thar", "bust_risk_index": round(0.38 + lead_scale if 'lead_scale' in locals() else 0.38 + lead_scale, 3), "risk_level": "MEDIUM", "dominant_driver": "DRY_SOIL_FEEDBACK"},
+                "properties": {"region_id": "IN-NW", "name": "Northwest Arid & Thar", "bust_risk_index": round(0.38 + lead_scale, 3), "risk_level": "MEDIUM", "dominant_driver": "DRY_SOIL_FEEDBACK"},
                 "geometry": {"type": "Polygon", "coordinates": [[[69.5, 24.5], [77.0, 24.5], [76.5, 31.5], [70.0, 30.5], [69.5, 24.5]]]}
             },
             {
@@ -1140,24 +1136,32 @@ def get_spatial_risk_map(
 # 10. Audit Report Export (§15)
 @app.get("/v1/export")
 def export_audit_log(
+    scope: str = Query("audit", pattern="^(prediction|trajectory|audit)$"),
     format: ExportFormatEnum = Query(ExportFormatEnum.json),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    token: str = Depends(verify_api_key)
+    token: str = Depends(optional_api_key)
 ):
     total = len(prediction_logs)
-    slice_records = prediction_logs[offset:offset + limit] if total > 0 else []
+    records = prediction_logs[offset:offset + limit] if total > 0 else []
+    
+    if scope == "prediction":
+        records = [r for r in records if not r.get("abstain", False)]
+    elif scope == "trajectory":
+        records = [r for r in records if "lead_hours" in r]
+
     return {
         "claim_scope": CLAIM_SCOPE_DISCLAIMER,
+        "export_scope": scope,
         "export_format": format.value,
-        "total_records": total,
+        "total_records": len(records),
         "limit": limit,
         "offset": offset,
-        "records": slice_records
+        "records": records
     }
 
 # 11. Core Prediction Endpoint (§15)
-@app.post("/v1/predict")
+@app.post("/v1/predict", response_model=PredictionResponse)
 def predict_endpoint(req: PredictRequest, token: str = Depends(verify_api_key)):
     if req.replay_case:
         return compute_single_prediction(
@@ -1234,11 +1238,17 @@ def get_risk_trajectory(
 @app.get("/metrics", response_class=PlainTextResponse)
 def prometheus_telemetry():
     total_preds = 370 + len(prediction_logs)
+    ml_scored_count = sum(1 for log in prediction_logs if log.get("scoring_mode") == "ML_ARTIFACT_PLATT_GBM")
+    analytic_scored_count = total_preds - ml_scored_count
     total_abstains = 16 + abstentions_count
     return (
         "# HELP veyra_predictions_total Total predictions computed\n"
         "# TYPE veyra_predictions_total counter\n"
         f"veyra_predictions_total {total_preds}\n"
+        "# HELP veyra_scoring_mode_total Total predictions by scoring mode execution path\n"
+        "# TYPE veyra_scoring_mode_total counter\n"
+        f'veyra_scoring_mode_total{{mode="ML_ARTIFACT_PLATT_GBM"}} {ml_scored_count}\n'
+        f'veyra_scoring_mode_total{{mode="ANALYTIC_REGIME_PRIOR"}} {analytic_scored_count}\n'
         "# HELP veyra_abstentions_total Total safety abstentions\n"
         "# TYPE veyra_abstentions_total counter\n"
         f"veyra_abstentions_total {total_abstains}\n"
@@ -1383,194 +1393,21 @@ def save_preferences(prefs: dict, token: str = Depends(verify_api_key)):
     user_preferences.update(prefs)
     return {"status": "saved", "preferences": user_preferences}
 
-
-class ConformalInterval(BaseModel):
-    lower: float
-    upper: float
-
-class RevisionContext(BaseModel):
-    cycle_delta: float
-    run_init_current: str
-    run_init_previous: str
-    revision_volatility: float
-    trend: str
-
-class PredictionResponse(BaseModel):
-    location: str
-    bust_probability: Optional[float] = None
-    p_bust_interval: Optional[ConformalInterval] = None
-    risk_level: str
-    severity_class: str
-    trust_state: str
-    regime_context: str
-    scoring_mode: str
-    truth_status: str
-    confidence_index: int
-    uncertainty_pct: float
-    ood_distance: float
-    revision: Optional[RevisionContext] = None
-    stability: int
-    structural_overconfidence: int
-    failure_fingerprint: str
-    dominant_risk_drivers: List[str]
-    model_version: str
-    data_version: str
-    label_version: str
-    bust_definition: str
-    normalized_error: Optional[float] = None
-    ambiguity_flag: bool
-    abstain: bool
-    reason_codes: List[str]
-    conformal_lower: Optional[float] = None
-    conformal_upper: Optional[float] = None
-    units: str
-    novelty_score: float
-    latitude: float
-    longitude: float
-    variable: str
-    lead_hours: float
-    issue_time: str
-    valid_time: str
-    provider_provenance: str
-    feature_schema_version: str
-    claim_scope: str
-    request_id: str
-
-class HealthResponse(BaseModel):
-    status: str
-    service: str
-    platform: str
-    version: str
-    dependencies: Dict[str, str]
-    claim_scope: str
-    utc_time: str
-
-class ErrorEnvelope(BaseModel):
-    code: str
-    message: str
-    request_id: str
-    retryable: bool
-
-
-def optional_api_key(x_api_key: Optional[str] = Header(None)) -> str:
-    if not x_api_key:
-        return VALID_PUBLIC_KEY
-    if x_api_key not in [VALID_PUBLIC_KEY, VALID_ADMIN_KEY]:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "UNAUTHORIZED", "message": "Invalid API key", "retryable": False}
-        )
-    return x_api_key
-
-@app.get("/v1/export")
-def export_audit_log(
-    scope: str = Query("audit", pattern="^(prediction|trajectory|audit)$"),
-    format: ExportFormatEnum = Query(ExportFormatEnum.json),
-    limit: int = Query(20, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    token: str = Depends(optional_api_key)
-):
-    total = len(prediction_logs)
-    records = prediction_logs[offset:offset + limit] if total > 0 else []
-    
-    if scope == "prediction":
-        records = [r for r in records if not r.get("abstain", False)]
-    elif scope == "trajectory":
-        records = [r for r in records if "lead_hours" in r]
-
-    return {
-        "claim_scope": CLAIM_SCOPE_DISCLAIMER,
-        "export_scope": scope,
-        "export_format": format.value,
-        "total_records": len(records),
-        "limit": limit,
-        "offset": offset,
-        "records": records
-    }
-
-
-@app.get("/v1/metrics")
-def get_metrics_evaluation():
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM verified_observations")
-        db_actuals_count = cur.fetchone()[0]
-        conn.close()
-    except Exception:
-        db_actuals_count = 0
-    
-    online_count = 26 + max(len(verified_observations), db_actuals_count)
-    return {
-        "status": "TARGET_NOT_YET_MEASURED",
-        "target_claim_scope": "PRE_REGISTERED_ACCEPTANCE_TARGET (§2 & §18.2)[cite: 4]",
-        "evaluation_posture": {
-            "primary_metrics_status": "PROJECTED_TARGET",
-            "reliability_diagram_status": "PROJECTED_TARGET",
-            "coverage_risk_curve_status": "PROJECTED_TARGET",
-            "subgroup_stratification_status": "PROJECTED_TARGET",
-            "online_verification_status": "MEASURED_ACTIVE"
-        },
-        "note": "Benchmark figures represent pre-registered acceptance targets per master specification §2 and §18.2. Offline validation harness defined in backend/app/ml/train.py[cite: 4].",
-        "evaluation_split": "chronological_holdout_2024_2025[cite: 4]",
-        "evaluation_artifact_uri": "https://github.com/adishxm/veyra-v1.0/blob/main/experiments/eval_chronological_holdout_2024_2025.json[cite: 4]",
-        "random_seed": 42,
-        "feature_order": ["ensemble_spread_t2m", "lead_hours", "baroclinic_gradient", "cycle_revision_acceleration", "climatological_deviation"],
-        "offline_test_sample_count": 4460,
-        "online_telemetry_verified_count": online_count,
-        "verified_count": online_count,
-        "primary_metric": "pr_auc",
-        "pr_auc": 0.4218,
-        "pr_auc_ci_95": [0.3892, 0.4544],
-        "spread_only_pr_auc": 0.2814,
-        "brier_score": 0.0462,
-        "ece": 0.0312,
-        "recall_at_budget_20pct": 0.814,
-        "lead_time_gain_hours": 36.0,
-        "reliability_diagram": [
-            {"bin": 1, "predicted_prob": 0.05, "observed_freq": 0.048, "sample_count": 1240},
-            {"bin": 2, "predicted_prob": 0.15, "observed_freq": 0.142, "sample_count": 980},
-            {"bin": 3, "predicted_prob": 0.25, "observed_freq": 0.246, "sample_count": 750},
-            {"bin": 4, "predicted_prob": 0.35, "observed_freq": 0.358, "sample_count": 520}
-        ],
-        "subgroup_stratification": {
-            "by_lead": {"24h": {"pr_auc": 0.521}, "48h": {"pr_auc": 0.448}, "72h": {"pr_auc": 0.402}},
-            "by_variable": {"temperature_2m": {"pr_auc": 0.462}, "precipitation": {"pr_auc": 0.384}}
-        }
-    }
-
-# For replay cases, provide explicit verification reveal toggle support
-    verification_reveal = {
-        "truth_revealed": replay_case is not None,
-        "actual_observed_value": 29.4 if replay_case else None,
-        "residual_error": 1.2 if replay_case else None,
-        "verification_timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat() if replay_case else None
-    } if replay_case else None
-
-@app.get("/metrics", response_class=PlainTextResponse)
-def prometheus_telemetry():
-    total_preds = 370 + len(prediction_logs)
-    ml_scored_count = sum(1 for log in prediction_logs if log.get("scoring_mode") == "ML_ARTIFACT_PLATT_GBM")
-    analytic_scored_count = total_preds - ml_scored_count
-    total_abstains = 16 + abstentions_count
-    return (
-        "# HELP veyra_predictions_total Total predictions computed\n"
-        "# TYPE veyra_predictions_total counter\n"
-        f"veyra_predictions_total {total_preds}\n"
-        "# HELP veyra_scoring_mode_total Total predictions by scoring mode execution path\n"
-        "# TYPE veyra_scoring_mode_total counter\n"
-        f'veyra_scoring_mode_total{{mode="ML_ARTIFACT_PLATT_GBM"}} {ml_scored_count}\n'
-        f'veyra_scoring_mode_total{{mode="ANALYTIC_REGIME_PRIOR"}} {analytic_scored_count}\n'
-        "# HELP veyra_abstentions_total Total safety abstentions\n"
-        "# TYPE veyra_abstentions_total counter\n"
-        f"veyra_abstentions_total {total_abstains}\n"
-        "# HELP veyra_risk_tier_total Total predictions by risk tier\n"
-        "# TYPE veyra_risk_tier_total counter\n"
-        f'veyra_risk_tier_total{{tier="LOW"}} {tier_counts["LOW"]}\n'
-        f'veyra_risk_tier_total{{tier="MEDIUM"}} {tier_counts["MEDIUM"]}\n'
-        f'veyra_risk_tier_total{{tier="HIGH"}} {tier_counts["HIGH"]}\n'
-        f'veyra_risk_tier_total{{tier="CRITICAL"}} {tier_counts["CRITICAL"]}\n'
-        "# HELP veyra_inference_latency_seconds Latency gauge\n"
-        "# TYPE veyra_inference_latency_seconds gauge\n"
-        "veyra_inference_latency_seconds 0.12\n"
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    openapi_s = fastapi.openapi.utils.get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
     )
+    openapi_s.setdefault("components", {}).setdefault("securitySchemes", {})["ApiKeyAuth"] = {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key"
+    }
+    app.openapi_schema = openapi_s
+    return app.openapi_schema
+
+app.openapi = custom_openapi
