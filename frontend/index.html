@@ -622,7 +622,7 @@
           <div class="form-group" style="position: relative;">
             <label for="locQuery">Location / Alias</label>
             <div style="display: flex; gap: 8px;">
-              <input type="text" id="locQuery" value="Bengaluru" autocomplete="off" style="flex: 1;" />
+              <input type="text" id="locQuery" value="New Delhi" autocomplete="off" style="flex: 1;" />
               <button type="button" class="btn-secondary" onclick="useLiveGeolocation()" title="Use live GPS" style="width: auto; padding: 0 12px;">
                 <i data-lucide="locate" style="width: 16px; height: 16px;"></i>
               </button>
@@ -633,11 +633,11 @@
           <div class="coord-grid form-group">
             <div>
               <label for="latCoord">Latitude</label>
-              <input type="number" id="latCoord" value="12.9716" step="0.0001" />
+              <input type="number" id="latCoord" value="28.6139" step="0.0001" />
             </div>
             <div>
               <label for="lonCoord">Longitude</label>
-              <input type="number" id="lonCoord" value="77.5946" step="0.0001" />
+              <input type="number" id="lonCoord" value="77.2090" step="0.0001" />
             </div>
           </div>
 
@@ -855,10 +855,10 @@
           <div class="form-group">
             <label for="batchJsonInput">JSON Coordinates Matrix</label>
             <textarea id="batchJsonInput" rows="12" class="mono" style="font-size: 0.8rem;">[
-  {"location": "Bengaluru", "latitude": 12.9716, "longitude": 77.5946, "lead_hours": 48, "variable": "temperature_2m"},
+  {"location": "New Delhi", "latitude": 28.6139, "longitude": 77.2090, "lead_hours": 48, "variable": "temperature_2m"},
   {"location": "Cherrapunji", "latitude": 25.2986, "longitude": 91.7303, "lead_hours": 48, "variable": "temperature_2m"},
   {"location": "Kolkata, WB", "latitude": 22.5726, "longitude": 88.3639, "lead_hours": 48, "variable": "temperature_2m"},
-  {"location": "New Delhi", "latitude": 28.6139, "longitude": 77.2090, "lead_hours": 72, "variable": "z500"},
+  {"location": "Bengaluru", "latitude": 12.9716, "longitude": 77.5946, "lead_hours": 72, "variable": "z500"},
   {"location": "South Pole (OOD Probe)", "latitude": -89.9, "longitude": 0.0, "lead_hours": 240, "variable": "temperature_2m"}
 ]</textarea>
           </div>
@@ -990,14 +990,14 @@
     updateUTCClock();
 
     // Leaflet GIS Setup with Regional Polygons Layer Support
-    const map = L.map('sentinelMap', { zoomControl: true }).setView([22.5726, 88.3639], 5);
+    const map = L.map('sentinelMap', { zoomControl: true }).setView([28.6139, 77.2090], 5);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 18,
       attribution: '&copy; OpenStreetMap'
     }).addTo(map);
 
-    let targetMarker = L.marker([22.5726, 88.3639]).addTo(map);
-    let uncertaintyCircle = L.circle([22.5726, 88.3639], {
+    let targetMarker = L.marker([28.6139, 77.2090]).addTo(map);
+    let uncertaintyCircle = L.circle([28.6139, 77.2090], {
       radius: 45000,
       color: '#0071bc',
       fillColor: '#38bdf8',
@@ -1461,7 +1461,7 @@ REASON CODES          : ${(d.reason_codes || []).join(', ')}`;
       if (lat < 6.0 || lat > 37.5 || lon < 68.0 || lon > 98.0) {
         return { claim_scope: "CLIENT_OFFLINE_FALLBACK", location: "South Pole Probe", latitude: lat, longitude: lon, variable: variable, lead_hours: lead, bust_probability: null, risk_level: "ABSTAIN", severity_class: "ABSTAIN", units: variable === 'precipitation' ? 'mm' : '°C', novelty_score: 17.8, trust_state: "ABSTAIN", abstain: true, confidence_index: 10, stability: 15, uncertainty_pct: 25.0, failure_fingerprint: "OUT_OF_DOMAIN_DIVERGENCE", reason_codes: ["OUT_OF_SUPPORT_DOMAIN"] };
       }
-      return { claim_scope: "CLIENT_OFFLINE_FALLBACK", location: "Bengaluru", latitude: lat, longitude: lon, variable: variable, lead_hours: lead, bust_probability: 0.18, risk_level: "LOW", severity_class: "MARGINAL", conformal_lower: 24.1, conformal_upper: 30.3, units: variable === 'precipitation' ? 'mm' : '°C', novelty_score: 4.12, trust_state: "SUPPORTED", abstain: false, confidence_index: 95, stability: 95, uncertainty_pct: 3.37, failure_fingerprint: "STABLE_SYNOPTIC_CONSENSUS", reason_codes: ["SUCCESS"] };
+      return { claim_scope: "CLIENT_OFFLINE_FALLBACK", location: "New Delhi", latitude: lat, longitude: lon, variable: variable, lead_hours: lead, bust_probability: 0.18, risk_level: "LOW", severity_class: "MARGINAL", conformal_lower: 24.1, conformal_upper: 30.3, units: variable === 'precipitation' ? 'mm' : '°C', novelty_score: 4.12, trust_state: "SUPPORTED", abstain: false, confidence_index: 95, stability: 95, uncertainty_pct: 3.37, failure_fingerprint: "STABLE_SYNOPTIC_CONSENSUS", reason_codes: ["SUCCESS"] };
     }
 
     async function fetchModelCatalog() {
