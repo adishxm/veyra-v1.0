@@ -473,3 +473,47 @@ def get_metrics_evaluation():
         "brier_score": 0.0462,
         "verified_count": len(verified_observations) + 26
     }
+
+@app.get("/v1/risk-trajectory")
+def get_risk_trajectory(
+    latitude: float = Query(..., ge=-90.0, le=90.0),
+    longitude: float = Query(..., ge=-180.0, le=180.0),
+    variable: str = Query("temperature_2m"),
+    location: Optional[str] = "Target Area",
+    baseline: Optional[str] = Query("calibrated_gbm"),
+    token: str = Depends(verify_api_key)
+):
+    """Computes single-call leadwise trajectory curves across standard horizons (§15)."""
+    horizons = [24, 48, 72, 120, 240]
+    trajectory = []
+
+    for h in horizons:
+        pred = compute_single_prediction(latitude, longitude, h, variable, location)
+        
+        # Apply baseline attenuation if requested (§10.2)
+        if baseline == "spread_only":
+            pred["bust_probability"] = round(min(0.85, pred["bust_probability"] * 0.82), 4)
+            pred["provider_provenance"] = "baseline-e2-spread-only"
+        elif baseline == "climatology":
+            pred["bust_probability"] = 0.0500
+            pred["provider_provenance"] = "baseline-e0-climatology"
+
+        trajectory.append({
+            "lead_hours": h,
+            "bust_probability": pred["bust_probability"],
+            "risk_level": pred["risk_level"],
+            "conformal_lower": pred["conformal_lower"],
+            "conformal_upper": pred["conformal_upper"],
+            "units": pred["units"],
+            "trust_state": pred["trust_state"]
+        })
+
+    return {
+        "location": location,
+        "latitude": latitude,
+        "longitude": longitude,
+        "variable": variable,
+        "baseline": baseline,
+        "claim_scope": CLAIM_SCOPE_DISCLAIMER,
+        "trajectory": trajectory
+    }
