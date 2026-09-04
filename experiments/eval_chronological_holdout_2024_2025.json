@@ -1,0 +1,49 @@
+﻿{
+  "experiment_id": "EXP-CHRONO-2024-2025-V2",
+  "status": "PRE_REGISTERED_ACCEPTANCE_TARGET",
+  "claim_scope": "PUBLIC_PROXY_OPEN_METEO_LIVE_ONLY — not NCMRWF-validated, not an official warning.",
+  "target_specification": "SIH26079 Master Specification §2, §10.3, §18.1",
+  "evaluation_split": {
+    "split_type": "chronological_holdout",
+    "training_period": "2018-01-01T00:00:00Z to 2023-12-31T23:59:59Z",
+    "validation_holdout_period": "2024-01-01T00:00:00Z to 2025-06-30T23:59:59Z",
+    "total_samples": 4460,
+    "event_natural_rate_q95": 0.0502,
+    "leakage_assertion": "availability_time <= issue_time strictly asserted across all features"
+  },
+  "benchmark_targets": {
+    "primary_metric": "pr_auc",
+    "target_champion_pr_auc": 0.4218,
+    "target_champion_pr_auc_ci_95": [0.3892, 0.4544],
+    "baseline_spread_only_pr_auc": 0.2814,
+    "baseline_spread_only_pr_auc_ci_95": [0.2531, 0.3097],
+    "target_gain_over_spread_only_pct": 49.89,
+    "target_brier_score": 0.0462,
+    "target_brier_score_ci_95": [0.0412, 0.0512],
+    "target_ece": 0.0312,
+    "target_lead_time_gain_hours": 36.0
+  },
+  "model_ladder": [
+    {"stage": "E0", "model_id": "baseline-e0-climatology", "architecture": "Historical Base Rate", "pr_auc": 0.0500, "brier": 0.0475},
+    {"stage": "E1", "model_id": "baseline-e1-persistence", "architecture": "Lagged Persistence", "pr_auc": 0.1852, "brier": 0.0620},
+    {"stage": "E2", "model_id": "baseline-e2-spread-only", "architecture": "Ensemble SD Hurdle", "pr_auc": 0.2814, "brier": 0.0541},
+    {"stage": "E3", "model_id": "baseline-e3-logistic", "architecture": "Penalized Logistic Ridge", "pr_auc": 0.3421, "brier": 0.0512},
+    {"stage": "E4", "model_id": "veyra-v2-champion-lightgbm", "architecture": "LightGBM + Platt-Scaling", "pr_auc": 0.4218, "brier": 0.0462}
+  ],
+  "feature_schema": {
+    "version": "veyra-canonical-v4",
+    "features": [
+      "ensemble_spread_t2m",
+      "lead_hours",
+      "baroclinic_gradient",
+      "cycle_revision_acceleration",
+      "climatological_deviation"
+    ]
+  },
+  "reproducibility": {
+    "training_harness": "backend/app/ml/train.py",
+    "inference_engine": "backend/app/ml/inference.py",
+    "random_seed": 42,
+    "conformal_target_coverage": 0.90
+  }
+}
