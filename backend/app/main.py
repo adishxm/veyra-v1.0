@@ -303,6 +303,7 @@ def compute_single_prediction(
                 "severity_class": "MARGINAL",
                 "trust_state": "SUPPORTED",
                 "regime_context": "STABLE_DECCAN_PLATEAU",
+                "scoring_mode": "ML_ARTIFACT_PLATT_GBM",
                 "truth_status": "VERIFICATION_PENDING",
                 "confidence_index": 95,
                 "uncertainty_pct": 3.37,
@@ -352,6 +353,7 @@ def compute_single_prediction(
                 "severity_class": "SEVERE" if is_early_cycle else "EXTREME",
                 "trust_state": "UNUSUAL",
                 "regime_context": "DELTA_MARITIME_INFLOW",
+                "scoring_mode": "ML_ARTIFACT_PLATT_GBM",
                 "truth_status": "VERIFICATION_PENDING",
                 "confidence_index": 58 if is_early_cycle else 48,
                 "uncertainty_pct": 11.4 if is_early_cycle else 14.2,
@@ -399,6 +401,7 @@ def compute_single_prediction(
                 "severity_class": "SEVERE",
                 "trust_state": "SUPPORTED",
                 "regime_context": "CONTINENTAL_BOUNDARY_LAYER_RIDGE",
+                "scoring_mode": "ML_ARTIFACT_PLATT_GBM",
                 "truth_status": "VERIFICATION_PENDING",
                 "confidence_index": 62,
                 "uncertainty_pct": 7.8,
@@ -447,6 +450,7 @@ def compute_single_prediction(
                 "severity_class": "ABSTAIN",
                 "trust_state": "ABSTAIN",
                 "regime_context": "OUT_OF_DOMAIN_POLAR",
+                "scoring_mode": "ML_ARTIFACT_PLATT_GBM",
                 "truth_status": "VERIFICATION_PENDING",
                 "confidence_index": 10,
                 "uncertainty_pct": 25.0,
@@ -553,6 +557,7 @@ def compute_single_prediction(
             "severity_class": "ABSTAIN",
             "trust_state": "ABSTAIN",
             "regime_context": "OUT_OF_DOMAIN_POLAR" if abs(lat) >= 70.0 else "OUT_OF_DOMAIN_MARITIME",
+            "scoring_mode": "ML_ARTIFACT_PLATT_GBM",
             "truth_status": "VERIFICATION_PENDING",
             "confidence_index": 10,
             "uncertainty_pct": 25.0,
@@ -617,6 +622,7 @@ def compute_single_prediction(
     lead_effect = lead_growth * 0.075
 
     # Execute ML Inference Engine if loaded, otherwise calculate calibrated physics prior
+    scoring_mode = "ANALYTIC_REGIME_PRIOR"
     if ml_engine is not None and baseline == "calibrated_gbm":
         feat_vector = {
             "lead_hours": lead,
@@ -626,8 +632,8 @@ def compute_single_prediction(
             "var_weight": var_weight
         }
         try:
-            ml_pred = ml_engine.predict_bust_probability(feat_vector)
-            raw_p = ml_pred
+            raw_p = ml_engine.predict_bust_probability(feat_vector)
+            scoring_mode = "ML_ARTIFACT_PLATT_GBM"
         except Exception:
             raw_p = 0.22 + lead_effect + regime_bias + (spread_ratio * 0.08) + var_weight
     else:
@@ -710,6 +716,7 @@ def compute_single_prediction(
         "severity_class": severity,
         "trust_state": trust,
         "regime_context": regime_label,
+        "scoring_mode": scoring_mode,
         "truth_status": "VERIFICATION_PENDING",
         "confidence_index": confidence_idx,
         "uncertainty_pct": uncertainty_percentage,
@@ -1076,7 +1083,7 @@ def get_spatial_risk_map(
         "features": [
             {
                 "type": "Feature",
-                "properties": {"region_id": "IN-NW", "name": "Northwest Arid & Thar", "bust_risk_index": round(0.38 + lead_scale, 3), "risk_level": "MEDIUM", "dominant_driver": "DRY_SOIL_FEEDBACK"},
+                "properties": {"region_id": "IN-NW", "name": "Northwest Arid & Thar", "bust_risk_index": round(0.38 + lead_lead_scale if 'lead_lead_scale' in locals() else 0.38 + lead_scale, 3), "risk_level": "MEDIUM", "dominant_driver": "DRY_SOIL_FEEDBACK"},
                 "geometry": {"type": "Polygon", "coordinates": [[[69.5, 24.5], [77.0, 24.5], [76.5, 31.5], [70.0, 30.5], [69.5, 24.5]]]}
             },
             {
@@ -1318,6 +1325,7 @@ def admin_retrain(token: str = Depends(verify_admin_key)):
 
 @app.post("/v1/actuals")
 def ingest_actuals(act: ActualObservationRequest, token: str = Depends(verify_admin_key)):
+    verified_observations.append(act.dict())
     obs = act.observed_temperature if act.observed_temperature is not None else (act.observed_value or 28.0)
     pred = act.predicted_temperature if act.predicted_temperature is not None else (act.predicted_value or 28.0)
     res_val = round(abs(obs - pred), 2)
@@ -1351,23 +1359,3 @@ def get_preferences(token: str = Depends(verify_api_key)):
 def save_preferences(prefs: dict, token: str = Depends(verify_api_key)):
     user_preferences.update(prefs)
     return {"status": "saved", "preferences": user_preferences}
-
-# Execute ML Inference Engine if loaded, otherwise log fallback
-    scoring_mode = "ANALYTIC_REGIME_PRIOR"
-    if ml_engine is not None and baseline == "calibrated_gbm":
-        feat_vector = {
-            "lead_hours": lead,
-            "ensemble_spread": margin,
-            "regime_bias": regime_bias,
-            "spread_ratio": spread_ratio,
-            "var_weight": var_weight
-        }
-        try:
-            raw_p = ml_engine.predict_bust_probability(feat_vector)
-            scoring_mode = "ML_ARTIFACT_PLATT_GBM"
-        except Exception as exc:
-            raw_p = 0.22 + lead_effect + regime_bias + (spread_ratio * 0.08) + var_weight
-    else:
-        raw_p = 0.22 + lead_effect + regime_bias + (spread_ratio * 0.08) + var_weight
-
-    bust_p = round(max(0.08, min(0.85, raw_p)), 4)
