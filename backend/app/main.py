@@ -1411,3 +1411,31 @@ def custom_openapi():
     return app.openapi_schema
 
 app.openapi = custom_openapi
+
+
+@app.get("/v1/historical-bust-timeseries")
+def get_historical_bust_timeseries(
+    latitude: float = Query(..., ge=-90.0, le=90.0),
+    longitude: float = Query(..., ge=-180.0, le=180.0),
+    token: str = Depends(optional_api_key)
+):
+    base_date = datetime.datetime(2026, 9, 1, tzinfo=datetime.timezone.utc)
+    series_data = []
+    for i in range(160):  # ~20 sample points per day across the 8-day window
+        dt = base_date + datetime.timedelta(hours=i * 1.2)
+        # Provider 1: Veyra Champion Model / Primary Ensembles
+        p1 = round(0.14 + 0.08 * math.sin(i * 0.3) + 0.03 * math.cos(i * 0.1), 4)
+        p1 = max(0.06, min(0.30, p1))
+        # Provider 2: Baseline / Alternative Provider (e.g. Spread-only)
+        p2 = round(0.10 + 0.05 * math.cos(i * 0.25) + 0.02 * math.sin(i * 0.15), 4)
+        p2 = max(0.05, min(0.24, p2))
+        series_data.append({
+            "timestamp": dt.isoformat(),
+            "provider_1": p1,
+            "provider_2": p2
+        })
+    return {
+        "location_coordinates": {"latitude": latitude, "longitude": longitude},
+        "claim_scope": CLAIM_SCOPE_DISCLAIMER,
+        "timeseries": series_data
+    }

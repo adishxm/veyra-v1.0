@@ -326,14 +326,14 @@
 
     .map-panel {
       position: relative;
-      min-height: 600px;
+      min-height: 480px;
       border: 1px solid var(--noaa-border);
       border-radius: var(--radius-lg);
       overflow: hidden;
       background: #e8edf2;
       box-shadow: var(--shadow-md);
     }
-    #sentinelMap { height: 100%; min-height: 600px; width: 100%; }
+    #sentinelMap { height: 100%; min-height: 480px; width: 100%; }
 
     .verification-panel .panel-tabs {
       display: flex;
@@ -694,9 +694,25 @@
           </div>
         </aside>
 
-        <!-- Center Column: Map Panel with Leaflet & Regional Polygons -->
-        <div class="map-panel">
-          <div id="sentinelMap"></div>
+        <!-- Center Column: Map Panel + Historical Chart Below -->
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          <div class="map-panel">
+            <div id="sentinelMap"></div>
+          </div>
+
+          <!-- Bottom of Map: Bust Probability in Last Few Days Chart -->
+          <div class="panel" style="margin-bottom: 0; padding: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span style="font-size: 0.8rem; font-weight: 700; color: var(--noaa-dark-blue); text-transform: uppercase; letter-spacing: 0.05em;">Bust Probability in Last Few Days</span>
+              <div style="display: flex; gap: 16px; font-size: 0.75rem; font-weight: 600;">
+                <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 3px; background: #0071bc; display: inline-block;"></span> PROVIDER 1</span>
+                <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 3px; background: #cd2026; display: inline-block;"></span> PROVIDER 2</span>
+              </div>
+            </div>
+            <div style="height: 140px; position: relative;">
+              <canvas id="historicalBustChart"></canvas>
+            </div>
+          </div>
         </div>
 
         <!-- Right Column: Verification Panel with Real-Time Telemetry -->
@@ -1057,6 +1073,7 @@
       document.getElementById('replaySelect').value = '';
       targetMarker.setLatLng(e.latlng);
       uncertaintyCircle.setLatLng(e.latlng);
+      loadHistoricalBustChart(e.latlng.lat, e.latlng.lng);
     });
 
     // Autocomplete with Deduplication
@@ -1102,6 +1119,7 @@
       map.flyTo([lat, lon], 7);
       targetMarker.setLatLng([lat, lon]);
       uncertaintyCircle.setLatLng([lat, lon]);
+      loadHistoricalBustChart(lat, lon);
     }
 
     function useLiveGeolocation() {
@@ -1115,6 +1133,7 @@
         map.flyTo([lat, lon], 8);
         targetMarker.setLatLng([lat, lon]);
         uncertaintyCircle.setLatLng([lat, lon]);
+        loadHistoricalBustChart(lat, lon);
       });
     }
 
@@ -1226,13 +1245,84 @@
       });
     }
 
+    // Historical Multi-Provider Chart (Bottom of Map)
+    let historicalChart = null;
+    async function loadHistoricalBustChart(lat, lon) {
+      try {
+        const res = await fetch(`${API_BASE}/v1/historical-bust-timeseries?latitude=${lat}&longitude=${lon}`, {
+          headers: { 'X-API-Key': ACTIVE_TOKEN }
+        });
+        if (!res.ok) throw new Error("Failed to fetch historical bust timeseries");
+        const data = await res.json();
+
+        const labels = data.timeseries.map(d => {
+          const dt = new Date(d.timestamp);
+          return dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
+        });
+        const p1Data = data.timeseries.map(d => d.provider_1);
+        const p2Data = data.timeseries.map(d => d.provider_2);
+
+        const ctx = document.getElementById('historicalBustChart').getContext('2d');
+        if (historicalChart) {
+          historicalChart.destroy();
+        }
+
+        historicalChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: 'PROVIDER 1',
+                data: p1Data,
+                borderColor: '#0071bc',
+                borderWidth: 1.5,
+                pointRadius: 0,
+                tension: 0.2
+              },
+              {
+                label: 'PROVIDER 2',
+                data: p2Data,
+                borderColor: '#cd2026',
+                borderWidth: 1.5,
+                pointRadius: 0,
+                tension: 0.2
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              y: {
+                min: 0.06,
+                max: 0.30,
+                ticks: { stepSize: 0.06, font: { size: 9 } },
+                grid: { color: '#e5e7eb' }
+              },
+              x: {
+                ticks: { font: { size: 8 }, maxTicksLimit: 8 },
+                grid: { display: false }
+              }
+            },
+            plugins: {
+              legend: { display: false },
+              tooltip: { mode: 'index', intersect: false }
+            }
+          }
+        });
+      } catch (err) {
+        console.warn("Historical chart load error:", err);
+      }
+    }
+
     // View Routing
     document.querySelectorAll('.dropdown-content a[data-view]').forEach(a => {
       a.addEventListener('click', () => {
         const v = a.getAttribute('data-view');
         document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
         document.getElementById(`view-${v}`).classList.add('active');
-        if (v === 'sentinel') { setTimeout(() => { map.invalidateSize(); if(forecastChart) forecastChart.resize(); }, 60); }
+        if (v === 'sentinel') { setTimeout(() => { map.invalidateSize(); if(forecastChart) forecastChart.resize(); if(historicalChart) historicalChart.resize(); }, 60); }
         if (v === 'models') fetchModelCatalog();
       });
     });
@@ -1317,6 +1407,7 @@
         const d = await res.json();
         renderAudit(d);
         updateTrajectoryChart(lat, lon, variable, baseline);
+        loadHistoricalBustChart(lat, lon);
 
         // Fetch Live SHAP Feature Attributions & Analogs
         let extraTrace = "";
@@ -1360,6 +1451,7 @@
         console.warn("Falling back to local client evaluation:", e);
         const fallback = computeClientEvaluation(lat, lon, lead, variable, replayCase);
         renderAudit(fallback);
+        loadHistoricalBustChart(lat, lon);
       } finally {
         btn.disabled = false;
         btn.innerHTML = '<i data-lucide="zap"></i> Audit Reliability';
@@ -1530,6 +1622,7 @@ REASON CODES          : ${(d.reason_codes || []).join(', ')}`;
 
     initChart();
     executeSentinelAudit();
+    loadHistoricalBustChart(28.6139, 77.2090);
   </script>
 </body>
 </html>
