@@ -698,34 +698,7 @@
         <!-- Center Column: Map Panel + Historical Chart Below -->
         <div style="display: flex; flex-direction: column; gap: 16px; min-width: 0;">
           <div class="map-panel">
-            <!-- <div id="sentinelMap"></div> -->
-             <!-- Bottom of Map: Multi-Model Synoptic Verification Timeline -->
-            <div class="panel" style="margin-bottom: 0; padding: 14px; background: #ffffff;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 8px;">
-                <div>
-                  <span style="font-size: 0.78rem; font-weight: 700; color: var(--noaa-dark-blue); text-transform: uppercase; letter-spacing: 0.05em;">
-                    SYNOPTIC DISPERSION &amp; BUST DIVERGENCE (LAST 7 DAYS)
-                  </span>
-                  <div style="font-size: 0.7rem; color: var(--noaa-muted); font-family: 'JetBrains Mono', monospace;">
-                    Cycle Steps: 00Z / 06Z / 12Z / 18Z Initialization Runs | Ref: ERA5 Analysis
-                  </div>
-                </div>
-                <div style="display: flex; gap: 14px; font-size: 0.72rem; font-family: 'JetBrains Mono', monospace; font-weight: 600;">
-                  <span style="display: flex; align-items: center; gap: 5px;">
-                    <span style="width: 12px; height: 3px; background: #0071bc; display: inline-block; border-radius: 1px;"></span> NOAA GEFS v12
-                  </span>
-                  <span style="display: flex; align-items: center; gap: 5px;">
-                    <span style="width: 12px; height: 3px; background: #cd2026; display: inline-block; border-radius: 1px;"></span> ECMWF IFS-ENS
-                  </span>
-                  <span style="display: flex; align-items: center; gap: 5px; color: #b45309;">
-                    <span style="width: 12px; height: 0; border-top: 2px dashed #d97706; display: inline-block;"></span> Alert Threshold (τ=0.28)
-                  </span>
-                </div>
-              </div>
-              <div style="height: 155px; position: relative;">
-                <canvas id="historicalBustChart"></canvas>
-              </div>
-            </div>
+            <div id="sentinelMap"></div>
           </div>
 
           <!-- Bottom of Map: Bust Probability in Last Few Days Chart -->
@@ -1274,7 +1247,7 @@
     }
 
     // Historical Multi-Provider Chart (Bottom of Map)
-   let historicalChart = null;
+    let historicalChart = null;
     async function loadHistoricalBustChart(lat, lon) {
       try {
         const res = await fetch(`${API_BASE}/v1/historical-bust-timeseries?latitude=${lat}&longitude=${lon}`, {
@@ -1283,10 +1256,12 @@
         if (!res.ok) throw new Error("Failed to fetch historical bust timeseries");
         const data = await res.json();
 
-        const labels = data.timeseries.map(d => d.cycle_label);
-        const gefsData = data.timeseries.map(d => d.gefs_v12);
-        const ifsData = data.timeseries.map(d => d.ecmwf_ifs);
-        const thresholdLine = data.timeseries.map(d => d.decision_threshold);
+        const labels = data.timeseries.map(d => {
+          const dt = new Date(d.timestamp);
+          return dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
+        });
+        const p1Data = data.timeseries.map(d => d.provider_1);
+        const p2Data = data.timeseries.map(d => d.provider_2);
 
         const ctx = document.getElementById('historicalBustChart').getContext('2d');
         if (historicalChart) {
@@ -1299,95 +1274,46 @@
             labels: labels,
             datasets: [
               {
-                label: 'NOAA GEFS v12 (31-member)',
-                data: gefsData,
+                label: 'PROVIDER 1',
+                data: p1Data,
                 borderColor: '#0071bc',
-                backgroundColor: 'rgba(0, 113, 188, 0.05)',
-                borderWidth: 1.75,
-                pointRadius: 1.5,
-                pointHoverRadius: 4,
-                pointBackgroundColor: '#0071bc',
-                fill: true,
-                tension: 0.25
-              },
-              {
-                label: 'ECMWF IFS-ENS (51-member)',
-                data: ifsData,
-                borderColor: '#cd2026',
-                backgroundColor: 'rgba(205, 32, 38, 0.03)',
-                borderWidth: 1.75,
-                pointRadius: 1.5,
-                pointHoverRadius: 4,
-                pointBackgroundColor: '#cd2026',
-                fill: true,
-                tension: 0.25
-              },
-              {
-                label: 'Alert Threshold (τ = 0.28)',
-                data: thresholdLine,
-                borderColor: '#d97706',
-                borderWidth: 1.2,
-                borderDash: [4, 4],
+                borderWidth: 1.5,
                 pointRadius: 0,
-                fill: false
+                tension: 0.2
+              },
+              {
+                label: 'PROVIDER 2',
+                data: p2Data,
+                borderColor: '#cd2026',
+                borderWidth: 1.5,
+                pointRadius: 0,
+                tension: 0.2
               }
             ]
           },
           options: {
             responsive: true,
             maintainAspectRatio: false,
-            interaction: {
-              mode: 'index',
-              intersect: false
-            },
             scales: {
               y: {
-                min: 0.04,
-                max: 0.32,
-                ticks: {
-                  stepSize: 0.06,
-                  font: { family: 'JetBrains Mono', size: 9 },
-                  callback: val => (val * 100).toFixed(0) + '%'
-                },
-                title: {
-                  display: true,
-                  text: 'P(Bust | q95 Error)',
-                  font: { family: 'JetBrains Mono', size: 9, weight: 'bold' },
-                  color: '#475569'
-                },
-                grid: {
-                  color: '#e2e8f0',
-                  borderDash: [2, 2]
-                }
+                min: 0.06,
+                max: 0.30,
+                ticks: { stepSize: 0.06, font: { size: 9 } },
+                grid: { color: '#e5e7eb' }
               },
               x: {
-                ticks: {
-                  font: { family: 'JetBrains Mono', size: 8 },
-                  maxTicksLimit: 10
-                },
-                grid: {
-                  display: true,
-                  color: '#f1f5f9'
-                }
+                ticks: { font: { size: 8 }, maxTicksLimit: 8 },
+                grid: { display: false }
               }
             },
             plugins: {
               legend: { display: false },
-              tooltip: {
-                backgroundColor: 'rgba(27, 58, 107, 0.95)',
-                titleFont: { family: 'JetBrains Mono', size: 10, weight: 'bold' },
-                bodyFont: { family: 'JetBrains Mono', size: 9 },
-                padding: 10,
-                boxPadding: 4,
-                callbacks: {
-                  label: ctx => ` ${ctx.dataset.label}: ${(ctx.parsed.y * 100).toFixed(1)}%`
-                }
-              }
+              tooltip: { mode: 'index', intersect: false }
             }
           }
         });
       } catch (err) {
-        console.warn("Scientific timeseries chart render error:", err);
+        console.warn("Historical chart load error:", err);
       }
     }
 
