@@ -1,84 +1,126 @@
+# import os
+# import json
+# import joblib
+# import math
+# import logging
+# import numpy as np
+# from typing import Dict, Any, Tuple
+# from backend.app.ml.conformal_ood_engine import ConformalOODSentinel
+
+# logger = logging.getLogger("veyra.ml.inference")
+
+# ARTIFACT_DIR = os.path.join(os.path.dirname(__file__), "artifacts")
+# MODEL_PATH = os.path.join(ARTIFACT_DIR, "veyra_model_v2_1_0.joblib")
+# METADATA_PATH = os.path.join(ARTIFACT_DIR, "model_metadata.json")
+
+
+# class RealMLInferenceEngine:
+#     _artifact = None
+#     _metadata = None
+
+#     @classmethod
+#     def load_model(cls):
+#         if cls._artifact is None and os.path.exists(MODEL_PATH):
+#             try:
+#                 cls._artifact = joblib.load(MODEL_PATH)
+#                 logger.info("Successfully loaded Veyra ML artifact from %s", MODEL_PATH)
+#             except Exception as e:
+#                 logger.warning("Failed to load ML artifact (%s). Falling back to heuristic mode.", e)
+#                 cls._artifact = None
+
+#         if cls._metadata is None and os.path.exists(METADATA_PATH):
+#             try:
+#                 with open(METADATA_PATH, "r") as f:
+#                     cls._metadata = json.load(f)
+#             except Exception as e:
+#                 logger.warning("Failed to load model metadata (%s).", e)
+#                 cls._metadata = None
+
+#         return cls._artifact, cls._metadata
+
+#     @classmethod
+#     def predict(cls, features: Dict[str, Any]) -> Tuple[float, float, float, float, str, str]:
+#         artifact, _ = cls.load_model()
+
+#         lat = float(features.get("latitude", 22.57))
+#         lon = float(features.get("longitude", 88.36))
+#         lead_hours = float(features.get("lead_hours", 48))
+#         target_temp = float(features.get("temperature", 28.0))
+#         spread = float(features.get("ensemble_spread", 1.2))
+#         temp_var = float(features.get("temp_variance", 0.45))
+
+#         if any(math.isnan(v) or math.isinf(v) for v in [lat, lon, lead_hours, target_temp, spread, temp_var]):
+#             raise ValueError("Non-finite numeric values encountered in inference features")
+
+#         novelty = ConformalOODSentinel.compute_mahalanobis_novelty(target_temp, spread, temp_var, lead_hours)
+#         feat_vector = np.array([[spread, temp_var, 0.0, 0.0, lead_hours, novelty]])
+
+#         # Execute through trained pipeline if available; otherwise use heuristic fallback
+#         if artifact is not None and isinstance(artifact, dict) and "classifier" in artifact:
+#             try:
+#                 raw_p = artifact["classifier"].predict_proba(feat_vector)[:, 1].reshape(-1, 1)
+#                 raw_score = float(artifact["calibrator"].predict_proba(raw_p)[0, 1])
+#             except Exception as exc:
+#                 logger.error("Inference execution failed on artifact: %s. Using heuristic fallback.", exc)
+#                 raw_score = 0.10 + (spread * 0.12) + (lead_hours / 240.0) * 0.25
+#         else:
+#             raw_score = 0.10 + (spread * 0.12) + (lead_hours / 240.0) * 0.25
+
+#         return ConformalOODSentinel.evaluate(features, raw_score)
+    
+
+#     @classmethod
+#     def predict_bust_probability(cls, features: Dict[str, Any]) -> float:
+#         artifact, _ = cls.load_model()
+#         if artifact is None or "classifier" not in artifact:
+#             raise RuntimeError("artifact_unavailable")
+#         spread = float(features.get("ensemble_spread", 1.2))
+#         lead = float(features.get("lead_hours", 48))
+#         variance = spread ** 2 * 0.35
+#         novelty = 3.5 + (lead / 35.0)
+#         import numpy as np
+#         vec = np.array([[spread, variance, 0.0, 0.0, lead, novelty]])
+#         raw = artifact["classifier"].predict_proba(vec)[:, 1].reshape(-1, 1)
+#         return float(artifact["calibrator"].predict_proba(raw)[0, 1])
+
+
+
+
+
+
+
+
+
+
 import os
-import json
 import joblib
-import math
-import logging
 import numpy as np
-from typing import Dict, Any, Tuple
-from backend.app.ml.conformal_ood_engine import ConformalOODSentinel
-
-logger = logging.getLogger("veyra.ml.inference")
-
-ARTIFACT_DIR = os.path.join(os.path.dirname(__file__), "artifacts")
-MODEL_PATH = os.path.join(ARTIFACT_DIR, "veyra_model_v2_1_0.joblib")
-METADATA_PATH = os.path.join(ARTIFACT_DIR, "model_metadata.json")
-
+from typing import Dict, Any, Optional, Tuple
 
 class RealMLInferenceEngine:
-    _artifact = None
-    _metadata = None
-
-    @classmethod
-    def load_model(cls):
-        if cls._artifact is None and os.path.exists(MODEL_PATH):
-            try:
-                cls._artifact = joblib.load(MODEL_PATH)
-                logger.info("Successfully loaded Veyra ML artifact from %s", MODEL_PATH)
-            except Exception as e:
-                logger.warning("Failed to load ML artifact (%s). Falling back to heuristic mode.", e)
-                cls._artifact = None
-
-        if cls._metadata is None and os.path.exists(METADATA_PATH):
-            try:
-                with open(METADATA_PATH, "r") as f:
-                    cls._metadata = json.load(f)
-            except Exception as e:
-                logger.warning("Failed to load model metadata (%s).", e)
-                cls._metadata = None
-
-        return cls._artifact, cls._metadata
-
-    @classmethod
-    def predict(cls, features: Dict[str, Any]) -> Tuple[float, float, float, float, str, str]:
-        artifact, _ = cls.load_model()
-
-        lat = float(features.get("latitude", 22.57))
-        lon = float(features.get("longitude", 88.36))
-        lead_hours = float(features.get("lead_hours", 48))
-        target_temp = float(features.get("temperature", 28.0))
-        spread = float(features.get("ensemble_spread", 1.2))
-        temp_var = float(features.get("temp_variance", 0.45))
-
-        if any(math.isnan(v) or math.isinf(v) for v in [lat, lon, lead_hours, target_temp, spread, temp_var]):
-            raise ValueError("Non-finite numeric values encountered in inference features")
-
-        novelty = ConformalOODSentinel.compute_mahalanobis_novelty(target_temp, spread, temp_var, lead_hours)
-        feat_vector = np.array([[spread, temp_var, 0.0, 0.0, lead_hours, novelty]])
-
-        # Execute through trained pipeline if available; otherwise use heuristic fallback
-        if artifact is not None and isinstance(artifact, dict) and "classifier" in artifact:
-            try:
-                raw_p = artifact["classifier"].predict_proba(feat_vector)[:, 1].reshape(-1, 1)
-                raw_score = float(artifact["calibrator"].predict_proba(raw_p)[0, 1])
-            except Exception as exc:
-                logger.error("Inference execution failed on artifact: %s. Using heuristic fallback.", exc)
-                raw_score = 0.10 + (spread * 0.12) + (lead_hours / 240.0) * 0.25
-        else:
-            raw_score = 0.10 + (spread * 0.12) + (lead_hours / 240.0) * 0.25
-
-        return ConformalOODSentinel.evaluate(features, raw_score)
+    ARTIFACT_PATH = os.path.join(os.path.dirname(__file__), "artifacts", "veyra_model_v2_1_0.joblib")
     
+    @classmethod
+    def load_model(cls) -> Tuple[Optional[Any], str]:
+        if not os.path.exists(cls.ARTIFACT_PATH):
+            return None, "artifact_missing"
+        try:
+            artifact = joblib.load(cls.ARTIFACT_PATH)
+            return artifact, "loaded"
+        except Exception as e:
+            return None, str(e)
 
     @classmethod
     def predict_bust_probability(cls, features: Dict[str, Any]) -> float:
-        artifact, _ = cls.load_model()
+        artifact, status = cls.load_model()
         if artifact is None or "classifier" not in artifact:
-            raise RuntimeError("artifact_unavailable")
+            raise RuntimeError(f"artifact_unavailable: {status}")
+        
         spread = float(features.get("ensemble_spread", 1.2))
         lead = float(features.get("lead_hours", 48))
         variance = spread ** 2 * 0.35
         novelty = 3.5 + (lead / 35.0)
-        import numpy as np
+        
         vec = np.array([[spread, variance, 0.0, 0.0, lead, novelty]])
         raw = artifact["classifier"].predict_proba(vec)[:, 1].reshape(-1, 1)
         return float(artifact["calibrator"].predict_proba(raw)[0, 1])

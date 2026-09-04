@@ -717,6 +717,9 @@ def compute_single_prediction(
         "trust_state": trust,
         "regime_context": regime_label,
         "scoring_mode": scoring_mode,
+        "model_version": "veyra-v2-champion-lightgbm",
+        "data_version": "gfs-ensemble-openmeteo-v2.0",
+        "feature_schema_version": "veyra-canonical-v4",
         "truth_status": "VERIFICATION_PENDING",
         "confidence_index": confidence_idx,
         "uncertainty_pct": uncertainty_percentage,
@@ -726,8 +729,6 @@ def compute_single_prediction(
         "structural_overconfidence": 0,
         "failure_fingerprint": fingerprint,
         "dominant_risk_drivers": drivers,
-        "model_version": "veyra-v2-champion-lightgbm",
-        "data_version": "gfs-ensemble-openmeteo-v2.0",
         "label_version": "labels_v1",
         "bust_definition": "q95 of |forecast - ERA5| conditioned on (lead, variable, region, season)",
         "normalized_error": norm_err,
@@ -745,7 +746,6 @@ def compute_single_prediction(
         "issue_time": issue_time,
         "valid_time": valid_time,
         "provider_provenance": PROVIDER_PROVENANCE_STRING,
-        "feature_schema_version": "veyra-canonical-v4",
         "claim_scope": CLAIM_SCOPE_DISCLAIMER,
         "request_id": req_id
     }
