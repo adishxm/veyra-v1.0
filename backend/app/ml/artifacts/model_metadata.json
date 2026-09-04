@@ -2,12 +2,12 @@
   "model_id": "veyra-bust-2.1.0",
   "version": "2.1.0",
   "architecture": "Platt-Calibrated-HistGradientBoosting",
-  "sha256_checksum": "adaec18c8352a1d7",
+  "sha256_checksum": "e92d8dd232bf2a52",
   "training_sample_count": 10000,
   "conformal_quantile_90": 0.742,
   "metrics": {
-    "brier_score": 0.2192,
-    "roc_auc": 0.6564,
+    "brier_score": 0.2214,
+    "roc_auc": 0.6422,
     "decision_threshold": 0.28
   }
 }
