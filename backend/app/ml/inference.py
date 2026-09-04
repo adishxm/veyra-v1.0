@@ -67,3 +67,18 @@ class RealMLInferenceEngine:
             raw_score = 0.10 + (spread * 0.12) + (lead_hours / 240.0) * 0.25
 
         return ConformalOODSentinel.evaluate(features, raw_score)
+    
+
+    @classmethod
+    def predict_bust_probability(cls, features: Dict[str, Any]) -> float:
+        artifact, _ = cls.load_model()
+        if artifact is None or "classifier" not in artifact:
+            raise RuntimeError("artifact_unavailable")
+        spread = float(features.get("ensemble_spread", 1.2))
+        lead = float(features.get("lead_hours", 48))
+        variance = spread ** 2 * 0.35
+        novelty = 3.5 + (lead / 35.0)
+        import numpy as np
+        vec = np.array([[spread, variance, 0.0, 0.0, lead, novelty]])
+        raw = artifact["classifier"].predict_proba(vec)[:, 1].reshape(-1, 1)
+        return float(artifact["calibrator"].predict_proba(raw)[0, 1])

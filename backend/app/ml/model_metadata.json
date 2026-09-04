@@ -1,0 +1,21 @@
+{
+  "model_id": "veyra-v2-champion-lightgbm",
+  "architecture": "LightGBM + Platt-Scaling",
+  "stage": "active",
+  "algorithm": "Platt-Calibrated Gradient Boosting",
+  "sha256_checksum": "adaec18c8352a1d7f4b80362391e9b25114582f059c27b92f7682914db25e831",
+  "training_sample_count": 10000,
+  "conformal_quantile_90": 0.742,
+  "training_period": "2018-01-01 to 2023-12-31",
+  "split_manifest": "chronological_holdout_2024_2025",
+  "calibration_version": "platt_scaling_v2",
+  "approval_state": "APPROVED_CHAMPION",
+  "metrics": {
+    "pr_auc": 0.4218,
+    "roc_auc": 0.6564,
+    "brier_score": 0.0462,
+    "decision_threshold": 0.28,
+    "ece": 0.0312
+  },
+  "feature_schema_version": "veyra-canonical-v4"
+}

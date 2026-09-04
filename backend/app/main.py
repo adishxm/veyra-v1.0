@@ -1351,3 +1351,23 @@ def get_preferences(token: str = Depends(verify_api_key)):
 def save_preferences(prefs: dict, token: str = Depends(verify_api_key)):
     user_preferences.update(prefs)
     return {"status": "saved", "preferences": user_preferences}
+
+# Execute ML Inference Engine if loaded, otherwise log fallback
+    scoring_mode = "ANALYTIC_REGIME_PRIOR"
+    if ml_engine is not None and baseline == "calibrated_gbm":
+        feat_vector = {
+            "lead_hours": lead,
+            "ensemble_spread": margin,
+            "regime_bias": regime_bias,
+            "spread_ratio": spread_ratio,
+            "var_weight": var_weight
+        }
+        try:
+            raw_p = ml_engine.predict_bust_probability(feat_vector)
+            scoring_mode = "ML_ARTIFACT_PLATT_GBM"
+        except Exception as exc:
+            raw_p = 0.22 + lead_effect + regime_bias + (spread_ratio * 0.08) + var_weight
+    else:
+        raw_p = 0.22 + lead_effect + regime_bias + (spread_ratio * 0.08) + var_weight
+
+    bust_p = round(max(0.08, min(0.85, raw_p)), 4)
