@@ -360,7 +360,7 @@
     .tab-content { display: none; }
     .tab-content.active { display: block; }
 
-    /* Extended 3-Column Diagnostic Matrix */
+    /* Extended Diagnostic Matrix */
     .kpi-matrix {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -507,7 +507,7 @@
       font-size: 0.78rem;
       line-height: 1.6;
       color: #333;
-      max-height: 170px;
+      max-height: 190px;
       overflow-y: auto;
       white-space: pre-wrap;
     }
@@ -763,7 +763,6 @@
             <div class="chart-container-box">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                 <label style="margin:0;">Multi-Lead Horizon Trajectory</label>
-                <!-- Baseline Model Toggle Dropdown -->
                 <select id="baselineSelect" onchange="refreshTrajectoryChartOnly()" style="width:auto; padding:3px 8px; font-size:0.75rem;">
                   <option value="calibrated_gbm" selected>Model: E3 Platt-GBM</option>
                   <option value="spread_only">Baseline: E2 Spread-Only</option>
@@ -1222,7 +1221,8 @@
             longitude: lon,
             lead_hours: lead,
             variable: variable,
-            replay_case: replayCase
+            replay_case: replayCase,
+            baseline: baseline
           })
         });
 
@@ -1230,6 +1230,41 @@
         const d = await res.json();
         renderAudit(d);
         updateTrajectoryChart(lat, lon, variable, baseline);
+
+        // Fetch Live SHAP Feature Attributions
+        try {
+          const expRes = await fetch(
+            `${API_BASE}/v1/explanation?latitude=${lat}&longitude=${lon}&lead_hours=${lead}&variable=${variable}`,
+            { headers: { 'X-API-Key': ACTIVE_TOKEN } }
+          );
+          if (expRes.ok) {
+            const expData = await expRes.json();
+            const attrLines = expData.feature_attributions
+              .map(a => `  • ${a.feature.padEnd(32)} : +${a.contribution.toFixed(3)} [${a.correlational_signal}]`)
+              .join('\n');
+
+            const revText = d.revision
+              ? `\nCYCLE REVISION VELOCITY  : Δ ${d.revision.cycle_delta > 0 ? '+' : ''}${d.revision.cycle_delta} (Trend: ${d.revision.trend})`
+              : '';
+
+            document.getElementById('evidenceTrace').innerText = `[AUDIT-LOG ${new Date().toISOString()}]
+CLAIM SCOPE           : ${d.claim_scope}
+LOCATION              : ${d.location} (${d.latitude}, ${d.longitude})
+VARIABLE              : ${d.variable} (${d.units || 'N/A'})
+CONFIDENCE INDEX      : ${d.confidence_index || 95} / 100
+FORECAST STABILITY    : ${d.stability || 95} / 100
+UNCERTAINTY MARGIN    : ±${d.uncertainty_pct || 3.37}%
+FAILURE FINGERPRINT   : ${d.failure_fingerprint || "STABLE_SYNOPTIC_CONSENSUS"}
+DOMINANT RISK DRIVERS : ${(d.dominant_risk_drivers && d.dominant_risk_drivers.length > 0) ? d.dominant_risk_drivers.join(', ') : 'None (High Synoptic Consensus)'}${revText}
+REASON CODES          : ${(d.reason_codes || []).join(', ')}
+
+[SHAP FEATURE ATTRIBUTIONS (§9.2)]
+${attrLines}`;
+          }
+        } catch (expErr) {
+          console.warn("Explanation fetch skipped:", expErr);
+        }
+
       } catch (e) {
         console.warn("Falling back to local client evaluation:", e);
         const fallback = computeClientEvaluation(lat, lon, lead, variable, replayCase);
@@ -1245,10 +1280,9 @@
       const abstCard = document.getElementById('abstentionCard');
       const trustEl = document.getElementById('valTrustState');
 
-      // Populate Diagnostic & Telemetry Fields
-      document.getElementById('valConfidenceIndex').innerText = d.confidence_index !== undefined ? `${d.confidence_index}%` : "92%";
-      document.getElementById('valStability').innerText = d.stability !== undefined ? `${d.stability} / 100` : "91 / 100";
-      document.getElementById('valUncertaintyPct').innerText = d.uncertainty_pct !== undefined ? `±${d.uncertainty_pct}%` : "±3.27%";
+      document.getElementById('valConfidenceIndex').innerText = d.confidence_index !== undefined ? `${d.confidence_index}%` : "95%";
+      document.getElementById('valStability').innerText = d.stability !== undefined ? `${d.stability} / 100` : "95 / 100";
+      document.getElementById('valUncertaintyPct').innerText = d.uncertainty_pct !== undefined ? `±${d.uncertainty_pct}%` : "±3.37%";
       
       const fp = d.failure_fingerprint || "STABLE_SYNOPTIC_CONSENSUS";
       document.getElementById('valFailureFingerprint').innerText = fp;
@@ -1262,7 +1296,6 @@
       if (d.model_version) document.getElementById('pillModelVersion').innerText = d.model_version;
       if (d.data_version) document.getElementById('pillDataVersion').innerText = d.data_version;
 
-      // Abstention & Out-Of-Domain Handler
       if (d.abstain || d.bust_probability === null) {
         abstCard.style.display = 'block';
         document.getElementById('abstentionDetails').innerText = d.evidence ? d.evidence.join(' ') : "Out of calibrated geographic domain.";
@@ -1296,17 +1329,19 @@
       document.getElementById('valNoveltyScore').innerText = d.novelty_score !== undefined ? d.novelty_score : "--";
       document.getElementById('valReasonCodes').innerText = d.reason_codes ? d.reason_codes.join(', ') : "SUCCESS";
 
+      const revLine = d.revision
+        ? `\nCYCLE REVISION VELOCITY  : Δ ${d.revision.cycle_delta > 0 ? '+' : ''}${d.revision.cycle_delta} (Trend: ${d.revision.trend})`
+        : '';
+
       document.getElementById('evidenceTrace').innerText = `[AUDIT-LOG ${new Date().toISOString()}]
 CLAIM SCOPE           : ${d.claim_scope}
 LOCATION              : ${d.location} (${d.latitude}, ${d.longitude})
 VARIABLE              : ${d.variable} (${d.units || 'N/A'})
-CONFIDENCE INDEX      : ${d.confidence_index || 92} / 100
-FORECAST STABILITY    : ${d.stability || 91} / 100
-UNCERTAINTY MARGIN    : ±${d.uncertainty_pct || 3.27}%
+CONFIDENCE INDEX      : ${d.confidence_index || 95} / 100
+FORECAST STABILITY    : ${d.stability || 95} / 100
+UNCERTAINTY MARGIN    : ±${d.uncertainty_pct || 3.37}%
 FAILURE FINGERPRINT   : ${d.failure_fingerprint || "STABLE_SYNOPTIC_CONSENSUS"}
-DOMINANT RISK DRIVERS : ${(d.dominant_risk_drivers && d.dominant_risk_drivers.length > 0) ? d.dominant_risk_drivers.join(', ') : 'None (High Synoptic Consensus)'}
-MODEL VERSION         : ${d.model_version || "veyra-v2-champion-lightgbm"}
-DATA BACKBONE         : ${d.data_version || "gfs-ensemble-openmeteo-v2.0"}
+DOMINANT RISK DRIVERS : ${(d.dominant_risk_drivers && d.dominant_risk_drivers.length > 0) ? d.dominant_risk_drivers.join(', ') : 'None (High Synoptic Consensus)'}${revLine}
 TRUST STATE           : ${d.trust_state}
 REASON CODES          : ${(d.reason_codes || []).join(', ')}`;
 
@@ -1323,7 +1358,7 @@ REASON CODES          : ${(d.reason_codes || []).join(', ')}`;
       if (lat < 6.0 || lat > 37.5 || lon < 68.0 || lon > 98.0) {
         return { claim_scope: "CLIENT_OFFLINE_FALLBACK", location: "South Pole Probe", latitude: lat, longitude: lon, variable: variable, lead_hours: lead, bust_probability: null, risk_level: "ABSTAIN", units: variable === 'precipitation' ? 'mm' : '°C', novelty_score: 14.8, trust_state: "DEGRADED", abstain: true, confidence_index: 10, stability: 15, uncertainty_pct: 25.0, failure_fingerprint: "OUT_OF_DOMAIN_DIVERGENCE", reason_codes: ["OUT_OF_SUPPORT_DOMAIN"] };
       }
-      return { claim_scope: "CLIENT_OFFLINE_FALLBACK", location: "Bengaluru", latitude: lat, longitude: lon, variable: variable, lead_hours: lead, bust_probability: 0.0996, risk_level: "ELEVATED", conformal_lower: 23.64, conformal_upper: 30.76, units: variable === 'precipitation' ? 'mm' : '°C', novelty_score: 5.51, trust_state: "SUPPORTED", abstain: false, confidence_index: 92, stability: 91, uncertainty_pct: 3.27, failure_fingerprint: "STABLE_SYNOPTIC_CONSENSUS", reason_codes: ["SUCCESS"] };
+      return { claim_scope: "CLIENT_OFFLINE_FALLBACK", location: "Bengaluru", latitude: lat, longitude: lon, variable: variable, lead_hours: lead, bust_probability: 0.0996, risk_level: "LOW", conformal_lower: 23.64, conformal_upper: 30.76, units: variable === 'precipitation' ? 'mm' : '°C', novelty_score: 5.51, trust_state: "SUPPORTED", abstain: false, confidence_index: 95, stability: 95, uncertainty_pct: 3.37, failure_fingerprint: "STABLE_SYNOPTIC_CONSENSUS", reason_codes: ["SUCCESS"] };
     }
 
     async function fetchModelCatalog() {
