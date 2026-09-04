@@ -1083,7 +1083,7 @@ def get_spatial_risk_map(
         "features": [
             {
                 "type": "Feature",
-                "properties": {"region_id": "IN-NW", "name": "Northwest Arid & Thar", "bust_risk_index": round(0.38 + lead_lead_scale if 'lead_lead_scale' in locals() else 0.38 + lead_scale, 3), "risk_level": "MEDIUM", "dominant_driver": "DRY_SOIL_FEEDBACK"},
+                "properties": {"region_id": "IN-NW", "name": "Northwest Arid & Thar", "bust_risk_index": round(0.38 + lead_scale if 'lead_scale' in locals() else 0.38 + lead_scale, 3), "risk_level": "MEDIUM", "dominant_driver": "DRY_SOIL_FEEDBACK"},
                 "geometry": {"type": "Polygon", "coordinates": [[[69.5, 24.5], [77.0, 24.5], [76.5, 31.5], [70.0, 30.5], [69.5, 24.5]]]}
             },
             {
@@ -1359,3 +1359,108 @@ def get_preferences(token: str = Depends(verify_api_key)):
 def save_preferences(prefs: dict, token: str = Depends(verify_api_key)):
     user_preferences.update(prefs)
     return {"status": "saved", "preferences": user_preferences}
+
+
+class ConformalInterval(BaseModel):
+    lower: float
+    upper: float
+
+class RevisionContext(BaseModel):
+    cycle_delta: float
+    run_init_current: str
+    run_init_previous: str
+    revision_volatility: float
+    trend: str
+
+class PredictionResponse(BaseModel):
+    location: str
+    bust_probability: Optional[float] = None
+    p_bust_interval: Optional[ConformalInterval] = None
+    risk_level: str
+    severity_class: str
+    trust_state: str
+    regime_context: str
+    scoring_mode: str
+    truth_status: str
+    confidence_index: int
+    uncertainty_pct: float
+    ood_distance: float
+    revision: Optional[RevisionContext] = None
+    stability: int
+    structural_overconfidence: int
+    failure_fingerprint: str
+    dominant_risk_drivers: List[str]
+    model_version: str
+    data_version: str
+    label_version: str
+    bust_definition: str
+    normalized_error: Optional[float] = None
+    ambiguity_flag: bool
+    abstain: bool
+    reason_codes: List[str]
+    conformal_lower: Optional[float] = None
+    conformal_upper: Optional[float] = None
+    units: str
+    novelty_score: float
+    latitude: float
+    longitude: float
+    variable: str
+    lead_hours: float
+    issue_time: str
+    valid_time: str
+    provider_provenance: str
+    feature_schema_version: str
+    claim_scope: str
+    request_id: str
+
+class HealthResponse(BaseModel):
+    status: str
+    service: str
+    platform: str
+    version: str
+    dependencies: Dict[str, str]
+    claim_scope: str
+    utc_time: str
+
+class ErrorEnvelope(BaseModel):
+    code: str
+    message: str
+    request_id: str
+    retryable: bool
+
+
+def optional_api_key(x_api_key: Optional[str] = Header(None)) -> str:
+    if not x_api_key:
+        return VALID_PUBLIC_KEY
+    if x_api_key not in [VALID_PUBLIC_KEY, VALID_ADMIN_KEY]:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "UNAUTHORIZED", "message": "Invalid API key", "retryable": False}
+        )
+    return x_api_key
+
+@app.get("/v1/export")
+def export_audit_log(
+    scope: str = Query("audit", pattern="^(prediction|trajectory|audit)$"),
+    format: ExportFormatEnum = Query(ExportFormatEnum.json),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    token: str = Depends(optional_api_key)
+):
+    total = len(prediction_logs)
+    records = prediction_logs[offset:offset + limit] if total > 0 else []
+    
+    if scope == "prediction":
+        records = [r for r in records if not r.get("abstain", False)]
+    elif scope == "trajectory":
+        records = [r for r in records if "lead_hours" in r]
+
+    return {
+        "claim_scope": CLAIM_SCOPE_DISCLAIMER,
+        "export_scope": scope,
+        "export_format": format.value,
+        "total_records": len(records),
+        "limit": limit,
+        "offset": offset,
+        "records": records
+    }
