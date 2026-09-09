@@ -90,3 +90,15 @@ def test_checksums_match():
             with open(file_path, "rb") as target:
                 actual_hash = hashlib.sha256(target.read()).hexdigest()
             assert actual_hash.lower() == expected_hash.lower()
+
+def test_historical_bust_timeseries_contract():
+    res = client.get("/v1/historical-bust-timeseries?latitude=28.6139&longitude=77.2090")
+    assert res.status_code == 200
+    data = res.json()
+    assert "timeseries" in data
+    assert len(data["timeseries"]) >= 100
+    first = data["timeseries"][0]
+    assert "provider_1" in first and "provider_2" in first
+    assert "date_label" in first and "year_label" in first
+    assert 0.05 <= first["provider_1"] <= 0.35
+    assert 0.05 <= first["provider_2"] <= 0.35

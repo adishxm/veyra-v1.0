@@ -702,16 +702,30 @@
           </div>
 
           <!-- Bottom of Map: Bust Probability in Last Few Days Chart -->
-          <div class="panel" style="margin-bottom: 0; padding: 14px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-              <span style="font-size: 0.8rem; font-weight: 700; color: var(--noaa-dark-blue); text-transform: uppercase; letter-spacing: 0.05em;">Bust Probability in Last Few Days</span>
-              <div style="display: flex; gap: 16px; font-size: 0.75rem; font-weight: 600;">
-                <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 3px; background: #0071bc; display: inline-block;"></span> PROVIDER 1</span>
-                <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 3px; background: #cd2026; display: inline-block;"></span> PROVIDER 2</span>
-              </div>
+          <div class="panel" style="margin-bottom: 0; padding: 14px 18px 16px; background: #ffffff; border: 1px solid #d1d5db;">
+            <!-- Centered Title matching reference image -->
+            <div style="text-align: center; margin-bottom: 10px;">
+              <span style="font-size: 0.88rem; font-weight: 800; color: #111827; letter-spacing: 0.05em; text-transform: uppercase;">BUST PROBABILITY IN LAST FEW DAYS</span>
             </div>
-            <div style="height: 140px; position: relative;">
-              <canvas id="historicalBustChart"></canvas>
+
+            <!-- Main Flex Container: Left Legend Box + Enclosed Chart Frame -->
+            <div style="display: flex; align-items: center; gap: 16px;">
+              <!-- Left Legend Box matching reference image -->
+              <div style="border: 1.5px solid #d1d5db; border-radius: 4px; padding: 10px 14px; background: #ffffff; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.03); flex-shrink: 0;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <span style="display: inline-block; width: 32px; height: 3px; background-color: #0044ff; border-radius: 1px;"></span>
+                  <span style="font-size: 0.78rem; font-weight: 800; color: #111827; letter-spacing: 0.04em;">PROVIDER 1</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <span style="display: inline-block; width: 32px; height: 3px; background-color: #e60000; border-radius: 1px;"></span>
+                  <span style="font-size: 0.78rem; font-weight: 800; color: #111827; letter-spacing: 0.04em;">PROVIDER 2</span>
+                </div>
+              </div>
+
+              <!-- Canvas Container for Enclosed Chart -->
+              <div style="flex: 1; height: 165px; position: relative;">
+                <canvas id="historicalBustChart"></canvas>
+              </div>
             </div>
           </div>
         </div>
@@ -994,7 +1008,7 @@
   <script>
     lucide.createIcons();
 
-    const API_BASE = window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
+    const API_BASE = (!window.location.hostname || window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost")
       ? "http://127.0.0.1:8000"
       : "https://veyra-v1-0.onrender.com";
       
@@ -1248,6 +1262,21 @@
 
     // Historical Multi-Provider Chart (Bottom of Map)
     let historicalChart = null;
+
+    // Custom Plugin to render the crisp Matplotlib-style enclosing rectangular border
+    const chartAreaFramePlugin = {
+      id: 'chartAreaFramePlugin',
+      afterDraw(chart) {
+        const { ctx, chartArea } = chart;
+        if (!chartArea) return;
+        ctx.save();
+        ctx.strokeStyle = '#374151'; // Dark slate border matching reference image
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(chartArea.left, chartArea.top, chartArea.right - chartArea.left, chartArea.bottom - chartArea.top);
+        ctx.restore();
+      }
+    };
+
     async function loadHistoricalBustChart(lat, lon) {
       try {
         const res = await fetch(`${API_BASE}/v1/historical-bust-timeseries?latitude=${lat}&longitude=${lon}`, {
@@ -1256,9 +1285,12 @@
         if (!res.ok) throw new Error("Failed to fetch historical bust timeseries");
         const data = await res.json();
 
-        const labels = data.timeseries.map(d => {
-          const dt = new Date(d.timestamp);
-          return dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
+        // Multi-line labels: [Date, Year] at the start of each of the 8 days
+        const labels = data.timeseries.map((d, idx) => {
+          if (idx % 24 === 0) {
+            return [d.date_label || '01 SEP', d.year_label || '2026'];
+          }
+          return '';
         });
         const p1Data = data.timeseries.map(d => d.provider_1);
         const p2Data = data.timeseries.map(d => d.provider_2);
@@ -1276,39 +1308,95 @@
               {
                 label: 'PROVIDER 1',
                 data: p1Data,
-                borderColor: '#0071bc',
+                borderColor: '#0044ff', // Pure vibrant blue matching reference image
                 borderWidth: 1.5,
                 pointRadius: 0,
-                tension: 0.2
+                pointHoverRadius: 4,
+                tension: 0.12
               },
               {
                 label: 'PROVIDER 2',
                 data: p2Data,
-                borderColor: '#cd2026',
+                borderColor: '#e60000', // Pure vibrant red matching reference image
                 borderWidth: 1.5,
                 pointRadius: 0,
-                tension: 0.2
+                pointHoverRadius: 4,
+                tension: 0.12
               }
             ]
           },
+          plugins: [chartAreaFramePlugin],
           options: {
             responsive: true,
             maintainAspectRatio: false,
+            layout: {
+              padding: { top: 6, bottom: 2, left: 4, right: 8 }
+            },
             scales: {
               y: {
                 min: 0.06,
                 max: 0.30,
-                ticks: { stepSize: 0.06, font: { size: 9 } },
-                grid: { color: '#e5e7eb' }
+                ticks: {
+                  stepSize: 0.06,
+                  color: '#111827',
+                  font: { family: "'Source Sans 3', sans-serif", size: 11, weight: 'bold' },
+                  callback: function(val) {
+                    return val.toFixed(2);
+                  }
+                },
+                grid: {
+                  drawOnChartArea: false, // Clean white background inside plot frame
+                  drawTicks: true,
+                  tickLength: 6,
+                  color: '#374151'
+                },
+                border: {
+                  display: true,
+                  color: '#374151',
+                  width: 1.5
+                }
               },
               x: {
-                ticks: { font: { size: 8 }, maxTicksLimit: 8 },
-                grid: { display: false }
+                ticks: {
+                  autoSkip: false,
+                  maxRotation: 0,
+                  minRotation: 0,
+                  color: '#111827',
+                  font: { family: "'Source Sans 3', sans-serif", size: 10, weight: 'bold' },
+                  callback: function(val, index) {
+                    return labels[index] || '';
+                  }
+                },
+                grid: {
+                  drawOnChartArea: false,
+                  drawTicks: true,
+                  tickLength: 6,
+                  color: function(context) {
+                    return (context.index % 24 === 0) ? '#374151' : 'transparent';
+                  }
+                },
+                border: {
+                  display: true,
+                  color: '#374151',
+                  width: 1.5
+                }
               }
             },
             plugins: {
               legend: { display: false },
-              tooltip: { mode: 'index', intersect: false }
+              tooltip: {
+                mode: 'index',
+                intersect: false,
+                callbacks: {
+                  title: function(items) {
+                    const d = data.timeseries[items[0].dataIndex];
+                    return `${d.cycle_label || d.timestamp} (Live NWP)`;
+                  },
+                  label: function(ctx) {
+                    return ` ${ctx.dataset.label}: ${ctx.raw.toFixed(4)}`;
+                  }
+                }
+              }
             }
           }
         });
