@@ -58,3 +58,23 @@ def test_auth_required():
 def test_scoring_mode_declared():
     res = post(KOLKATA).json()
     assert res["scoring_mode"] in {"ANALYTIC_REGIME_PRIOR", "ML_ARTIFACT_PLATT_GBM"}
+
+def test_unknown_replay_case_rejected():
+    res = post({"location": "Kolkata", "replay_case": "phantom_case_999"})
+    assert res.status_code == 404
+    assert res.json()["detail"]["code"] == "REPLAY_CASE_NOT_FOUND"
+
+def test_location_xss_sanitized():
+    res = post({"location": "<script>alert('xss')</script>", "latitude": 22.56, "longitude": 88.36})
+    assert res.status_code == 200
+    assert "<script>" not in res.json()["location"]
+    assert "&lt;script&gt;" in res.json()["location"]
+
+def test_polar_analogs_and_explanations_suppressed():
+    res_exp = client.get("/v1/explanation?latitude=-89.9&longitude=0.0&lead_hours=48&variable=temperature_2m", headers=AUTH_KEY)
+    assert res_exp.status_code == 200
+    assert res_exp.json()["feature_attributions"] == []
+
+    res_ana = client.get("/v1/analogs?latitude=-89.9&longitude=0.0&lead_hours=48&variable=temperature_2m", headers=AUTH_KEY)
+    assert res_ana.status_code == 200
+    assert res_ana.json()["analogs"] == []

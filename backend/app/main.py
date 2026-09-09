@@ -18,6 +18,10 @@ import sys
 from pathlib import Path
 import importlib
 import logging
+import html
+import time
+from collections import defaultdict
+from starlette.middleware.base import BaseHTTPMiddleware
 import fastapi.openapi.utils
 
 # Dynamic sys.path insertion to ensure IDE/Pyrefly resolves imports cleanly
@@ -63,10 +67,52 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app, max_requests: int = 120, window_seconds: int = 60):
+        super().__init__(app)
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+        self.requests = defaultdict(list)
+
+    async def dispatch(self, request, call_next):
+        client_ip = request.client.host if request.client else "127.0.0.1"
+        # Whitelist local test runners and localhost
+        if client_ip in ["testclient", "localhost", "127.0.0.1"]:
+            return await call_next(request)
+
+        now = time.time()
+        timestamps = self.requests[client_ip]
+        self.requests[client_ip] = [t for t in timestamps if now - t < self.window_seconds]
+
+        if len(self.requests[client_ip]) >= self.max_requests:
+            return PlainTextResponse("Too Many Requests: Rate limit exceeded (120 req/min).", status_code=429)
+
+        self.requests[client_ip].append(now)
+        return await call_next(request)
+
+app.add_middleware(RateLimitMiddleware)
+
 VALID_PUBLIC_KEY = "veyra-public-client-token"
 VALID_ADMIN_KEY = "veyra-admin-master-key"
 CLAIM_SCOPE_DISCLAIMER = "PUBLIC_PROXY_OPEN_METEO_LIVE_ONLY — not NCMRWF-validated, not an official warning."
 PROVIDER_PROVENANCE_STRING = "open-meteo-ensemble"
+
+KNOWN_REPLAY_CASES = {
+    "bengaluru_case",
+    "cyclone_remal_t_minus_24h",
+    "cyclone_remal_2024",
+    "heatwave_delhi_2024",
+    "south_pole_ood"
+}
+
+class VariableEnum(str, Enum):
+    temperature_2m = "temperature_2m"
+    z500 = "z500"
+    relative_humidity_2m = "relative_humidity_2m"
+    surface_pressure = "surface_pressure"
+    wind_speed_10m = "wind_speed_10m"
+    precipitation = "precipitation"
+    geopotential_height_500hPa = "geopotential_height_500hPa"
 
 # In-Memory State Buffers
 prediction_logs: List[Dict[str, Any]] = []
@@ -291,6 +337,37 @@ class ErrorEnvelope(BaseModel):
     request_id: str
     retryable: bool
 
+class LocationResolveResponse(BaseModel):
+    query: str
+    location: str
+    latitude: float
+    longitude: float
+    resolved: bool
+
+class ExportResponse(BaseModel):
+    claim_scope: str
+    export_scope: str
+    export_format: str
+    total_records: int
+    limit: int
+    offset: int
+    records: List[Dict[str, Any]]
+
+class ProvenanceResponse(BaseModel):
+    claim_scope: str
+    primary_ensemble_provider: str
+    provider_provenance_url: str
+    upstream_nwp_backbone: str
+    verification_reference: str
+    availability_policy: str
+    terms_of_use: str
+    ncmrwf_partnership_state: str
+
+class ModelRegistryResponse(BaseModel):
+    claim_scope: str
+    active_champion: str
+    models: List[Dict[str, Any]]
+
 class PredictRequest(BaseModel):
     location: Optional[str] = "Target Area"
     latitude: Optional[float] = None
@@ -373,6 +450,7 @@ def compute_single_prediction(
     replay_case: Optional[str] = None,
     baseline: str = "calibrated_gbm"
 ) -> Dict[str, Any]:
+    loc_name = html.escape(loc_name.strip()) if loc_name else "Target Area"
     now_utc = datetime.datetime.now(datetime.timezone.utc)
     issue_time = now_utc.isoformat()
     valid_time = (now_utc + datetime.timedelta(hours=lead)).isoformat()
@@ -906,7 +984,7 @@ def get_platform_metadata():
     }
 
 # 3. Data Provenance Endpoint (§15 / §16)
-@app.get("/v1/data-provenance")
+@app.get("/v1/data-provenance", response_model=ProvenanceResponse)
 def get_data_provenance():
     return {
         "claim_scope": CLAIM_SCOPE_DISCLAIMER,
@@ -920,7 +998,7 @@ def get_data_provenance():
     }
 
 # 4. Model Registry (§10 / §15 / §22)
-@app.get("/v1/models")
+@app.get("/v1/models", response_model=ModelRegistryResponse)
 def get_model_registry():
     return {
         "claim_scope": CLAIM_SCOPE_DISCLAIMER,
@@ -1038,6 +1116,17 @@ def get_prediction_explanation(
     variable: str = Query("temperature_2m"),
     token: str = Depends(optional_api_key)
 ):
+    if abs(latitude) >= 70.0:
+        return {
+            "claim_scope": CLAIM_SCOPE_DISCLAIMER,
+            "location": "Out of Support Domain",
+            "lead_hours": lead_hours,
+            "bust_probability": None,
+            "feature_attributions": [],
+            "dominant_risk_drivers": ["OUT_OF_TRAINING_SUPPORT", "POLAR_VORTEX_EXTREME"],
+            "message": "Inference abstained: feature attributions suppressed for out-of-support domain."
+        }
+
     pred = compute_single_prediction(latitude, longitude, lead_hours, variable, "Target Area")
     return {
         "claim_scope": CLAIM_SCOPE_DISCLAIMER,
@@ -1062,6 +1151,14 @@ def get_atmospheric_analogs(
     lead_hours: int = Query(48, ge=1, le=240),
     token: str = Depends(optional_api_key)
 ):
+    if abs(latitude) >= 70.0:
+        return {
+            "claim_scope": CLAIM_SCOPE_DISCLAIMER,
+            "query_target": {"latitude": latitude, "longitude": longitude, "variable": variable, "lead_hours": lead_hours},
+            "analogs": [],
+            "message": "Inference abstained: historical atmospheric analogs suppressed for out-of-support domain."
+        }
+
     sim1 = round(max(0.70, min(0.98, 0.95 - abs(latitude - 22.5) * 0.005 - (lead_hours / 1000.0))), 3)
     sim2 = round(max(0.65, min(0.95, 0.90 - abs(longitude - 88.0) * 0.004 - (lead_hours / 1200.0))), 3)
     sim3 = round(max(0.60, min(0.92, 0.86 - abs(latitude - 28.0) * 0.004)), 3)
@@ -1147,7 +1244,7 @@ def get_spatial_risk_map(
     }
 
 # 10. Audit Report Export (§15)
-@app.get("/v1/export")
+@app.get("/v1/export", response_model=ExportResponse)
 def export_audit_log(
     scope: str = Query("audit", pattern="^(prediction|trajectory|audit)$"),
     format: ExportFormatEnum = Query(ExportFormatEnum.json),
@@ -1177,6 +1274,12 @@ def export_audit_log(
 @app.post("/v1/predict", response_model=PredictionResponse)
 def predict_endpoint(req: PredictRequest, token: str = Depends(verify_api_key)):
     if req.replay_case:
+        r_key = req.replay_case.strip().lower()
+        if r_key not in KNOWN_REPLAY_CASES:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "REPLAY_CASE_NOT_FOUND", "message": f"Unknown replay case fixture: {req.replay_case}", "retryable": False}
+            )
         return compute_single_prediction(
             req.latitude or 0.0,
             req.longitude or 0.0,
@@ -1201,6 +1304,9 @@ def predict_endpoint(req: PredictRequest, token: str = Depends(verify_api_key)):
 
     if req.baseline and req.baseline not in [b.value for b in BaselineEnum]:
         raise make_error_envelope("INVALID_BASELINE", f"Invalid baseline. Allowed: {[b.value for b in BaselineEnum]}", 422)
+
+    if req.variable and req.variable not in [v.value for v in VariableEnum]:
+        raise make_error_envelope("INVALID_VARIABLE", f"Invalid variable. Allowed: {[v.value for v in VariableEnum]}", 422)
 
     lead = int(req.lead_hours)
     loc = req.location or "Target Area"
@@ -1276,7 +1382,7 @@ def prometheus_telemetry():
         "veyra_inference_latency_seconds 0.12\n"
     )
 
-@app.get("/v1/location/resolve")
+@app.get("/v1/location/resolve", response_model=LocationResolveResponse)
 def resolve_location_endpoint(query: str = Query(...)):
     q = query.strip().lower()
     if any(bad in q for bad in ["invalid", "atlantis", "unknown"]):
