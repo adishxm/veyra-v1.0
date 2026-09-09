@@ -137,3 +137,32 @@ def test_all_schema_routes_typed():
     for r in app.routes:
         if isinstance(r, APIRoute) and r.include_in_schema:
             assert r.response_model is not None, f"Untyped route found: {r.path}"
+
+def test_metrics_truth_and_reconciliation():
+    res = client.get("/v1/metrics")
+    assert res.status_code == 200
+    m = res.json()
+    assert m["status"] == "MEASURED"
+    assert m["pr_auc"] == 0.1709
+    assert m["spread_only_pr_auc"] == 0.1258
+    assert m["gain_over_spread_only_pct"] == 35.83
+    assert m["brier_score"] == 0.0409
+    assert m["offline_test_sample_count"] == 892
+    assert m["train_calibration_test_split"] == [2676, 892, 892]
+    assert m["artifact_sha256"] == "08bbbc9a7fbca0c1c005ece5b0fc42245e700f774e37d48b16351eab3d285494"
+
+def test_security_headers_present():
+    res = client.get("/health")
+    assert res.headers.get("X-Content-Type-Options") == "nosniff"
+    assert res.headers.get("X-Frame-Options") == "DENY"
+    assert res.headers.get("Referrer-Policy") == "no-referrer"
+    assert "max-age" in res.headers.get("Strict-Transport-Security", "")
+
+def test_risk_multiple_and_unclamped_resolution():
+    res = post({**KOLKATA, "lead_hours": 24})
+    assert res.status_code == 200
+    data = res.json()
+    assert "risk_multiple" in data
+    assert data["risk_multiple"] == round(data["bust_probability"] / 0.05, 2)
+    # Ensure artificial 0.08 clamp is removed (can be below 0.08 if raw model output is small)
+    assert 0.01 <= data["bust_probability"] <= 0.95

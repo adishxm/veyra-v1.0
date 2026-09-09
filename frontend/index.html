@@ -1663,7 +1663,7 @@
       } else {
         abstCard.style.display = 'none';
         document.getElementById('valBustProb').innerText = `${(d.bust_probability * 100).toFixed(2)}%`;
-        document.getElementById('valBustProb').style.color = d.bust_probability > 0.5 ? "var(--risk-high)" : "var(--risk-low)";
+        document.getElementById('valBustProb').style.color = d.bust_probability >= 0.18 ? "var(--risk-high)" : (d.bust_probability >= 0.10 ? "var(--risk-med)" : "var(--risk-low)");
         
         if (d.p_bust_interval) {
           document.getElementById('lblBustInterval').innerText = `p-Interval: [${(d.p_bust_interval.lower*100).toFixed(1)}%, ${(d.p_bust_interval.upper*100).toFixed(1)}%]`;
@@ -1672,7 +1672,8 @@
         const riskEl = document.getElementById('valRiskTier');
         riskEl.innerText = d.risk_level;
         riskEl.style.color = d.risk_level === 'HIGH' || d.risk_level === 'CRITICAL' ? "var(--risk-high)" : (d.risk_level === 'MEDIUM' ? "var(--risk-med)" : "var(--risk-low)");
-        document.getElementById('lblSeverityClass').innerText = `Severity: ${d.severity_class || 'MODERATE'}`;
+        const multStr = d.risk_multiple ? ` (${d.risk_multiple}× base)` : '';
+        document.getElementById('lblSeverityClass').innerText = `Severity: ${d.severity_class || 'MODERATE'}${multStr}`;
 
         trustEl.innerText = d.trust_state;
         trustEl.style.color = d.trust_state === 'SUPPORTED' ? "var(--trust-normal)" : (d.trust_state === 'UNUSUAL' ? "var(--trust-unusual)" : "var(--trust-ood)");

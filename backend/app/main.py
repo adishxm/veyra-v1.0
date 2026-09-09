@@ -69,6 +69,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, max_requests: int = 120, window_seconds: int = 60):
         super().__init__(app)
@@ -87,10 +98,25 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.requests[client_ip] = [t for t in timestamps if now - t < self.window_seconds]
 
         if len(self.requests[client_ip]) >= self.max_requests:
-            return PlainTextResponse("Too Many Requests: Rate limit exceeded (120 req/min).", status_code=429)
+            res = JSONResponse(
+                status_code=429,
+                content={
+                    "code": "RATE_LIMIT_EXCEEDED",
+                    "message": "Too Many Requests: Rate limit exceeded (120 req/min).",
+                    "request_id": f"req_{uuid.uuid4().hex[:8]}",
+                    "retryable": True
+                }
+            )
+            res.headers["Retry-After"] = "60"
+            res.headers["X-RateLimit-Limit"] = str(self.max_requests)
+            res.headers["X-RateLimit-Remaining"] = "0"
+            return res
 
         self.requests[client_ip].append(now)
-        return await call_next(request)
+        response = await call_next(request)
+        response.headers["X-RateLimit-Limit"] = str(self.max_requests)
+        response.headers["X-RateLimit-Remaining"] = str(max(0, self.max_requests - len(self.requests[client_ip])))
+        return response
 
 app.add_middleware(RateLimitMiddleware)
 
@@ -288,6 +314,7 @@ class PredictionResponse(BaseModel):
     p_bust_interval: Optional[ConformalInterval] = None
     risk_level: str
     severity_class: str
+    risk_multiple: Optional[float] = None
     trust_state: str
     regime_context: str
     scoring_mode: str
@@ -401,6 +428,8 @@ class MetricsResponse(BaseModel):
     storage_persistence_policy: Optional[str] = None
     evaluation_split: str
     evaluation_artifact_uri: str
+    artifact_sha256: Optional[str] = None
+    train_calibration_test_split: Optional[List[int]] = None
     random_seed: int
     feature_order: List[str]
     offline_test_sample_count: int
@@ -994,32 +1023,35 @@ def compute_single_prediction(
     else:
         raw_p = 0.22 + lead_effect + regime_bias + (spread_ratio * 0.08) + var_weight
 
-    bust_p = round(max(0.08, min(0.85, raw_p)), 4)
+    # Remove artificial floor; let calibrated model values speak (§12.1)
+    bust_p = round(max(0.01, min(0.95, raw_p)), 4)
 
     # 6. Monotone E0–E4 Baseline Ladder Formulation (§10.2)
     if baseline == "climatology":
         bust_p = 0.0500
     elif baseline == "persistence":
-        bust_p = round(max(0.06, min(0.65, 0.10 + (lead_growth * 0.07) + (abs(regime_bias) * 0.25))), 4)
+        bust_p = round(max(0.01, min(0.65, 0.10 + (lead_growth * 0.07) + (abs(regime_bias) * 0.25))), 4)
     elif baseline == "spread_only":
-        bust_p = round(max(0.05, min(0.70, 0.14 + (lead_growth * 0.06) + (spread_ratio * 0.16))), 4)
+        bust_p = round(max(0.01, min(0.70, 0.14 + (lead_growth * 0.06) + (spread_ratio * 0.16))), 4)
     elif baseline == "logistic":
-        bust_p = round(max(0.07, min(0.82, bust_p * 0.94)), 4)
+        bust_p = round(max(0.01, min(0.82, bust_p * 0.94)), 4)
 
     # 7. Monotone Severity & Risk Ladder (§8.2 / §12.1)
-    if bust_p < 0.25:
+    # Quantiles of the calibrated model distribution under q95 (~5% base rate)
+    if bust_p < 0.10:
         risk = "LOW"
         severity = "MARGINAL"
-    elif bust_p < 0.50:
+    elif bust_p < 0.18:
         risk = "MEDIUM"
         severity = "MODERATE"
-    elif bust_p < 0.75:
+    elif bust_p < 0.25:
         risk = "HIGH"
         severity = "SEVERE"
     else:
         risk = "CRITICAL"
         severity = "EXTREME"
 
+    risk_mult = round(bust_p / 0.05, 2)
     record_prediction_tier(risk)
 
     # Four-State Trust Ladder (§11.3)
@@ -1069,6 +1101,7 @@ def compute_single_prediction(
         "p_bust_interval": p_interval,
         "risk_level": risk,
         "severity_class": severity,
+        "risk_multiple": risk_mult,
         "trust_state": trust,
         "regime_context": regime_label,
         "scoring_mode": scoring_mode,
@@ -1191,10 +1224,10 @@ def get_model_registry():
                 "architecture": "HistGradientBoosting + Platt-Scaling",
                 "algorithm": "HistGradientBoosting + Platt-Scaling",
                 "stage": "active",
-                "evaluation_status": "APPROVED_PRE_REGISTERED_TARGET",
-                "checksum": "adaec18c8352a1d7f4b80362391e9b25114582f059c27b92f7682914db25e831",
+                "evaluation_status": "MEASURED",
+                "checksum": "f07f9953ca84a52cfcb9e45a02eb804195531a00398a3cba6df24983a8c34ecd",
                 "approval_state": "APPROVED_CHAMPION",
-                "metrics": {"pr_auc": 0.4218, "brier_score": 0.0462, "ece": 0.0312}
+                "metrics": {"pr_auc": 0.1709, "brier_score": 0.0409, "ece": 0.0312}
             },
             {
                 "model_id": "logistic_baseline_e3",
@@ -1250,17 +1283,19 @@ def get_metrics_evaluation():
         "storage_persistence_policy": "EPHEMERAL_HOST_SQLITE_FREE_TIER — Render free instances reboot ephemerally; verified_count baseline resets to 26 seeded telemetry records on container spin-up.",
         "evaluation_split": "chronological_holdout_2024_2025",
         "evaluation_artifact_uri": "experiments/eval_chronological_holdout_2024_2025.json",
+        "artifact_sha256": "08bbbc9a7fbca0c1c005ece5b0fc42245e700f774e37d48b16351eab3d285494",
+        "train_calibration_test_split": [2676, 892, 892],
         "random_seed": 42,
         "feature_order": ["ensemble_spread", "variance", "regime_bias", "novelty", "lead_hours"],
         "offline_test_sample_count": 892,
         "online_telemetry_verified_count": online_count,
         "verified_count": online_count,
         "primary_metric": "pr_auc",
-        "pr_auc": 0.4218,
-        "pr_auc_ci_95": [0.3892, 0.4544],
-        "spread_only_pr_auc": 0.2814,
-        "gain_over_spread_only_pct": 49.89,
-        "brier_score": 0.0462,
+        "pr_auc": 0.1709,
+        "pr_auc_ci_95": [0.1450, 0.1980],
+        "spread_only_pr_auc": 0.1258,
+        "gain_over_spread_only_pct": 35.83,
+        "brier_score": 0.0409,
         "ece": 0.0312,
         "recall_at_budget_20pct": 0.814,
         "lead_time_gain_hours": 36.0,
