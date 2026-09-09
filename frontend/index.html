@@ -216,6 +216,66 @@
       .workspace { grid-template-columns: 1fr; }
     }
 
+    .historical-chart-panel {
+      overflow: hidden;
+      min-width: 0;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .historical-chart-flex {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      min-width: 0;
+      width: 100%;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+    .historical-chart-legend {
+      border: 1.5px solid #d1d5db;
+      border-radius: 4px;
+      padding: 10px 14px;
+      background: #ffffff;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+      flex-shrink: 0;
+      width: 185px;
+      max-width: 185px;
+      box-sizing: border-box;
+    }
+    .historical-chart-canvas-wrap {
+      flex: 1 1 0%;
+      min-width: 0;
+      height: 165px;
+      position: relative;
+      width: 100%;
+      max-width: 100%;
+      overflow: hidden;
+      box-sizing: border-box;
+    }
+    .historical-chart-canvas-wrap canvas {
+      display: block;
+      width: 100% !important;
+      max-width: 100% !important;
+      height: 100% !important;
+      box-sizing: border-box;
+    }
+    @media (max-width: 900px) {
+      .historical-chart-flex {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+      }
+      .historical-chart-legend {
+        width: 100% !important;
+        max-width: 100% !important;
+        flex-direction: row;
+        justify-content: space-around;
+      }
+    }
+
     .panel {
       background: var(--noaa-card-bg);
       border: 1px solid var(--noaa-border);
@@ -692,16 +752,16 @@
           </div>
 
           <!-- Bottom of Map: Bust Probability in Last 3 Months Chart -->
-          <div class="panel" style="margin-bottom: 0; padding: 14px 18px 16px; background: #ffffff; border: 1px solid #d1d5db;">
+          <div class="panel historical-chart-panel" style="margin-bottom: 0; padding: 14px 18px 16px; background: #ffffff; border: 1px solid #d1d5db; overflow: hidden; width: 100%; box-sizing: border-box; min-width: 0;">
             <!-- Centered Title matching reference image -->
             <div style="text-align: center; margin-bottom: 10px;">
               <span id="historicalChartTitle" style="font-size: 0.88rem; font-weight: 800; color: #111827; letter-spacing: 0.05em; text-transform: uppercase;">BUST PROBABILITY IN LAST 3 MONTHS (90-DAY MULTI-PROVIDER AUDIT)</span>
             </div>
 
             <!-- Main Flex Container: Left Legend Box + Enclosed Chart Frame -->
-            <div style="display: flex; align-items: center; gap: 16px;">
+            <div class="historical-chart-flex" style="display: flex; align-items: center; gap: 16px; min-width: 0; width: 100%; overflow: hidden; box-sizing: border-box;">
               <!-- Left Legend Box with Real Dynamic NWP Provider Names for Location -->
-              <div style="border: 1.5px solid #d1d5db; border-radius: 4px; padding: 10px 14px; background: #ffffff; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.03); flex-shrink: 0; min-width: 175px;">
+              <div class="historical-chart-legend" style="border: 1.5px solid #d1d5db; border-radius: 4px; padding: 10px 14px; background: #ffffff; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.03); flex-shrink: 0; width: 185px; max-width: 185px; box-sizing: border-box;">
                 <div style="display: flex; align-items: center; gap: 10px;">
                   <span style="display: inline-block; width: 28px; height: 3px; background-color: #0044ff; border-radius: 1px; flex-shrink: 0;"></span>
                   <span id="historicalProvider1Label" style="font-size: 0.76rem; font-weight: 800; color: #111827; letter-spacing: 0.02em;">NCMRWF / IMD (NEPS)</span>
@@ -713,8 +773,8 @@
               </div>
 
               <!-- Canvas Container for Enclosed Chart -->
-              <div style="flex: 1; height: 165px; position: relative;">
-                <canvas id="historicalBustChart"></canvas>
+              <div class="historical-chart-canvas-wrap" style="flex: 1 1 0%; min-width: 0; height: 165px; position: relative; width: 100%; max-width: 100%; overflow: hidden; box-sizing: border-box;">
+                <canvas id="historicalBustChart" style="display: block; width: 100% !important; max-width: 100% !important; height: 100% !important; box-sizing: border-box;"></canvas>
               </div>
             </div>
           </div>
@@ -1283,10 +1343,11 @@
         if (p1El) p1El.textContent = p1Name;
         if (p2El) p2El.textContent = p2Name;
 
-        // Multi-line labels: [Date, Year] distributed across the 90 days (~12-day steps)
+        // Multi-line labels: [Date, Year] distributed across the 90 days (~15-18 day steps)
         const totalPoints = data.timeseries.length;
+        const stepInterval = Math.max(1, Math.round(totalPoints / 5)); // 5-6 clean milestones
         const labels = data.timeseries.map((d, idx) => {
-          if (idx === 0 || idx === totalPoints - 1 || idx % 26 === 0) {
+          if (idx === 0 || idx === totalPoints - 1 || idx % stepInterval === 0) {
             return [d.date_label || '', d.year_label || ''];
           }
           return '';
@@ -1294,10 +1355,18 @@
         const p1Data = data.timeseries.map(d => d.provider_1);
         const p2Data = data.timeseries.map(d => d.provider_2);
 
-        const ctx = document.getElementById('historicalBustChart').getContext('2d');
+        const canvasEl = document.getElementById('historicalBustChart');
         if (historicalChart) {
           historicalChart.destroy();
+          historicalChart = null;
         }
+        if (canvasEl) {
+          canvasEl.removeAttribute('width');
+          canvasEl.removeAttribute('height');
+          canvasEl.style.width = '100%';
+          canvasEl.style.height = '100%';
+        }
+        const ctx = canvasEl.getContext('2d');
 
         historicalChart = new Chart(ctx, {
           type: 'line',
@@ -1338,7 +1407,7 @@
                 ticks: {
                   stepSize: 0.06,
                   color: '#111827',
-                  font: { family: "'Source Sans 3', sans-serif", size: 11, weight: 'bold' },
+                  font: { family: "'Source Sans 3', sans-serif", size: 10, weight: 'bold' },
                   callback: function(val) {
                     return val.toFixed(2);
                   }
@@ -1361,7 +1430,7 @@
                   maxRotation: 0,
                   minRotation: 0,
                   color: '#111827',
-                  font: { family: "'Source Sans 3', sans-serif", size: 10, weight: 'bold' },
+                  font: { family: "'Source Sans 3', sans-serif", size: 9, weight: 'bold' },
                   callback: function(val, index) {
                     return labels[index] || '';
                   }
@@ -1371,7 +1440,7 @@
                   drawTicks: true,
                   tickLength: 6,
                   color: function(context) {
-                    return (context.index === 0 || context.index === totalPoints - 1 || context.index % 26 === 0) ? '#374151' : 'transparent';
+                    return (context.index === 0 || context.index === totalPoints - 1 || context.index % stepInterval === 0) ? '#374151' : 'transparent';
                   }
                 },
                 border: {
@@ -1411,9 +1480,16 @@
         const v = a.getAttribute('data-view');
         document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
         document.getElementById(`view-${v}`).classList.add('active');
-        if (v === 'sentinel') { setTimeout(() => { map.invalidateSize(); if(forecastChart) forecastChart.resize(); if(historicalChart) historicalChart.resize(); }, 60); }
+        if (v === 'sentinel') { setTimeout(() => { if (typeof map !== 'undefined' && map) map.invalidateSize(); if(forecastChart) forecastChart.resize(); if(historicalChart) historicalChart.resize(); }, 60); }
         if (v === 'models') fetchModelCatalog();
       });
+    });
+
+    // Global Window Resize Listener for Responsive Charts and Map
+    window.addEventListener('resize', () => {
+      if (historicalChart) historicalChart.resize();
+      if (forecastChart) forecastChart.resize();
+      if (typeof map !== 'undefined' && map) map.invalidateSize();
     });
 
     document.querySelectorAll('.panel-tabs button').forEach(b => {
