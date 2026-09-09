@@ -78,3 +78,15 @@ def test_polar_analogs_and_explanations_suppressed():
     res_ana = client.get("/v1/analogs?latitude=-89.9&longitude=0.0&lead_hours=48&variable=temperature_2m", headers=AUTH_KEY)
     assert res_ana.status_code == 200
     assert res_ana.json()["analogs"] == []
+
+def test_checksums_match():
+    import hashlib
+    with open("CHECKSUMS.txt", "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            expected_hash, file_path = line.split("  ")
+            with open(file_path, "rb") as target:
+                actual_hash = hashlib.sha256(target.read()).hexdigest()
+            assert actual_hash.lower() == expected_hash.lower()

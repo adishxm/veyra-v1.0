@@ -368,6 +368,155 @@ class ModelRegistryResponse(BaseModel):
     active_champion: str
     models: List[Dict[str, Any]]
 
+class MetadataResponse(BaseModel):
+    service: str
+    version: str
+    claim_scope: str
+    active_champion_model: str
+    label_policy: Dict[str, Any]
+    training_domain: Dict[str, Any]
+    supported_variables: List[str]
+    conformal_coverage_target: float
+    feature_schema_version: str
+
+class MetricsResponse(BaseModel):
+    status: str
+    target_claim_scope: str
+    evaluation_posture: Dict[str, str]
+    note: str
+    evaluation_split: str
+    evaluation_artifact_uri: str
+    random_seed: int
+    feature_order: List[str]
+    offline_test_sample_count: int
+    online_telemetry_verified_count: int
+    verified_count: int
+    primary_metric: str
+    pr_auc: float
+    pr_auc_ci_95: List[float]
+    spread_only_pr_auc: float
+    gain_over_spread_only_pct: float
+    brier_score: float
+    ece: float
+    recall_at_budget_20pct: float
+    lead_time_gain_hours: float
+    reliability_diagram: List[Dict[str, Any]]
+    subgroup_stratification: Dict[str, Any]
+
+class ReplayScenario(BaseModel):
+    case_id: str
+    title: str
+    variable: str
+    lead_hours: int
+
+class ForecastReplaysResponse(BaseModel):
+    claim_scope: str
+    available_replays: List[ReplayScenario]
+
+class FeatureAttribution(BaseModel):
+    feature: str
+    contribution: float
+    correlational_signal: str
+
+class ExplanationResponse(BaseModel):
+    claim_scope: str
+    location: str
+    lead_hours: int
+    bust_probability: Optional[float] = None
+    feature_attributions: List[FeatureAttribution]
+    dominant_risk_drivers: List[str]
+    message: Optional[str] = None
+
+class AtmosphericAnalog(BaseModel):
+    analog_id: str
+    historical_date: str
+    synoptic_pattern: str
+    pattern_similarity: float
+    historical_residual: float
+    bust_occurred: bool
+    affinity: str
+
+class AnalogsResponse(BaseModel):
+    claim_scope: str
+    query_target: Dict[str, Any]
+    analogs: List[AtmosphericAnalog]
+    message: Optional[str] = None
+
+class GeoJsonFeature(BaseModel):
+    type: str
+    properties: Dict[str, Any]
+    geometry: Dict[str, Any]
+
+class SpatialRiskMapResponse(BaseModel):
+    type: str
+    claim_scope: str
+    lead_hours: int
+    variable: str
+    features: List[GeoJsonFeature]
+
+class TrajectoryStep(BaseModel):
+    lead_hours: int
+    bust_probability: Optional[float] = None
+    p_bust_interval: Optional[Dict[str, float]] = None
+    risk_level: str
+    severity_class: str
+    regime_context: str
+    conformal_lower: Optional[float] = None
+    conformal_upper: Optional[float] = None
+    units: str
+    trust_state: str
+    confidence_index: int
+    stability: int
+    failure_fingerprint: str
+
+class RiskTrajectoryResponse(BaseModel):
+    location: Optional[str] = None
+    latitude: float
+    longitude: float
+    variable: str
+    baseline: str
+    claim_scope: str
+    trajectory: List[TrajectoryStep]
+
+class BatchPredictResponse(BaseModel):
+    results: List[Dict[str, Any]]
+    count: int
+
+class JobResponse(BaseModel):
+    job_id: str
+    status: str
+    results: List[Dict[str, Any]]
+    count: int
+    created_at: str
+
+class PredictionLogsResponse(BaseModel):
+    logs: List[Dict[str, Any]]
+    count: int
+
+class RetrainResponse(BaseModel):
+    status: str
+    model_id: str
+    message: str
+
+class ActualsResponse(BaseModel):
+    status: str
+    location: Optional[str] = None
+    residual: float
+    total_verified: int
+
+class TimeseriesPoint(BaseModel):
+    timestamp: str
+    cycle_label: str
+    gefs_v12: float
+    ecmwf_ifs: float
+    climatology_baseline: float
+    decision_threshold: float
+
+class HistoricalTimeseriesResponse(BaseModel):
+    location_coordinates: Dict[str, float]
+    claim_scope: str
+    timeseries: List[TimeseriesPoint]
+
 class PredictRequest(BaseModel):
     location: Optional[str] = "Target Area"
     latitude: Optional[float] = None
@@ -960,7 +1109,7 @@ def health_check():
     }
 
 # 2. Metadata Endpoint (§15 / §16)
-@app.get("/v1/metadata")
+@app.get("/v1/metadata", response_model=MetadataResponse)
 def get_platform_metadata():
     return {
         "service": "veyra-v4-platform",
@@ -1042,7 +1191,7 @@ def get_model_registry():
     }
 
 # 5. Scientific Evaluation Metrics (§18)
-@app.get("/v1/metrics")
+@app.get("/v1/metrics", response_model=MetricsResponse)
 def get_metrics_evaluation():
     try:
         conn = sqlite3.connect(DB_PATH)
@@ -1094,7 +1243,7 @@ def get_metrics_evaluation():
     }
 
 # 6. Replay Scenario Listing (§15 / §20)
-@app.get("/v1/forecasts")
+@app.get("/v1/forecasts", response_model=ForecastReplaysResponse)
 def list_forecast_replays(token: str = Depends(optional_api_key)):
     return {
         "claim_scope": CLAIM_SCOPE_DISCLAIMER,
@@ -1108,7 +1257,7 @@ def list_forecast_replays(token: str = Depends(optional_api_key)):
     }
 
 # 7. Feature Attribution & Explanation (§9.2 / §15)
-@app.get("/v1/explanation")
+@app.get("/v1/explanation", response_model=ExplanationResponse)
 def get_prediction_explanation(
     latitude: float = Query(..., ge=-90.0, le=90.0),
     longitude: float = Query(..., ge=-180.0, le=180.0),
@@ -1143,7 +1292,7 @@ def get_prediction_explanation(
     }
 
 # 8. Atmospheric Analogs Explorer (§9 / §12 / §15 / §20 step 6)
-@app.get("/v1/analogs")
+@app.get("/v1/analogs", response_model=AnalogsResponse)
 def get_atmospheric_analogs(
     latitude: float = Query(..., ge=-90.0, le=90.0),
     longitude: float = Query(..., ge=-180.0, le=180.0),
@@ -1197,7 +1346,7 @@ def get_atmospheric_analogs(
     }
 
 # 9. Spatial Risk Map Endpoint (§12 / §15)
-@app.get("/v1/risk-map")
+@app.get("/v1/risk-map", response_model=SpatialRiskMapResponse)
 def get_spatial_risk_map(
     lead_hours: int = Query(48, ge=1, le=240),
     variable: str = Query("temperature_2m"),
@@ -1313,7 +1462,7 @@ def predict_endpoint(req: PredictRequest, token: str = Depends(verify_api_key)):
     return compute_single_prediction(lat, lon, lead, req.variable or "temperature_2m", loc, baseline=req.baseline or "calibrated_gbm")
 
 # 12. Risk Trajectory Endpoint (§15)
-@app.get("/v1/risk-trajectory")
+@app.get("/v1/risk-trajectory", response_model=RiskTrajectoryResponse)
 def get_risk_trajectory(
     latitude: float = Query(..., ge=-90.0, le=90.0),
     longitude: float = Query(..., ge=-180.0, le=180.0),
@@ -1403,7 +1552,7 @@ def resolve_location_endpoint(query: str = Query(...)):
     lon = round(72.0 + ((seed // 7) % 150) / 10.0, 4)
     return {"query": query, "location": query, "latitude": lat, "longitude": lon, "resolved": True}
 
-@app.post("/v1/predict/batch")
+@app.post("/v1/predict/batch", response_model=BatchPredictResponse)
 def predict_batch_endpoint(batch: BatchPredictRequest, token: str = Depends(verify_api_key)):
     if len(batch.items) > 50:
         raise HTTPException(status_code=400, detail="Batch size exceeds maximum limit of 50 items")
@@ -1443,7 +1592,7 @@ def predict_batch_endpoint(batch: BatchPredictRequest, token: str = Depends(veri
 
     return {"results": results, "count": len(results)}
 
-@app.post("/v1/jobs/predict")
+@app.post("/v1/jobs/predict", response_model=JobResponse)
 def create_async_job(batch: BatchPredictRequest, token: str = Depends(verify_api_key)):
     job_id = f"job-{uuid.uuid4().hex[:8]}"
     batch_res = predict_batch_endpoint(batch, token)
@@ -1457,17 +1606,17 @@ def create_async_job(batch: BatchPredictRequest, token: str = Depends(verify_api
     jobs_db[job_id] = job_record
     return job_record
 
-@app.get("/v1/jobs/{job_id}")
+@app.get("/v1/jobs/{job_id}", response_model=JobResponse)
 def get_async_job(job_id: str, token: str = Depends(verify_api_key)):
     if job_id not in jobs_db:
         raise HTTPException(status_code=404, detail="Job not found")
     return jobs_db[job_id]
 
-@app.get("/v1/logs")
+@app.get("/v1/logs", response_model=PredictionLogsResponse)
 def get_prediction_logs(token: str = Depends(verify_admin_key)):
     return {"logs": prediction_logs, "count": len(prediction_logs)}
 
-@app.post("/v1/admin/retrain")
+@app.post("/v1/admin/retrain", response_model=RetrainResponse)
 def admin_retrain(token: str = Depends(verify_admin_key)):
     return {
         "status": "retrained",
@@ -1475,7 +1624,7 @@ def admin_retrain(token: str = Depends(verify_admin_key)):
         "message": "Model calibration and conformal bounds updated successfully"
     }
 
-@app.post("/v1/actuals")
+@app.post("/v1/actuals", response_model=ActualsResponse)
 def ingest_actuals(act: ActualObservationRequest, token: str = Depends(verify_admin_key)):
     verified_observations.append(act.dict())
     obs = act.observed_temperature if act.observed_temperature is not None else (act.observed_value or 28.0)
@@ -1532,7 +1681,7 @@ def custom_openapi():
 app.openapi = custom_openapi
 
 
-@app.get("/v1/historical-bust-timeseries")
+@app.get("/v1/historical-bust-timeseries", response_model=HistoricalTimeseriesResponse)
 def get_historical_bust_timeseries(
     latitude: float = Query(..., ge=-90.0, le=90.0),
     longitude: float = Query(..., ge=-180.0, le=180.0),
