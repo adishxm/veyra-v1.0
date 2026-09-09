@@ -1,6 +1,6 @@
 {
-  "model_id": "veyra-v2-champion-lightgbm",
-  "architecture": "LightGBM + Platt-Scaling",
+  "model_id": "veyra-v2-champion-histgbm",
+  "architecture": "HistGradientBoosting + Platt-Scaling",
   "stage": "active",
   "algorithm": "Platt-Calibrated Gradient Boosting",
   "sha256_checksum": "adaec18c8352a1d7f4b80362391e9b25114582f059c27b92f7682914db25e831",

@@ -32,7 +32,7 @@ def build_reproducible_artifact():
     X_test, y_test = X[n_train + n_val:], y[n_train + n_val:]
 
     # 2. Train HistGradientBoosting Classifier
-    base_model = HistGradientBoostingClassifier(max_iter=100, max_leaf_nodes=31, random_state=42)
+    base_model = HistGradientBoostingClassifier(max_iter=100, max_leaf_nodes=31, monotonic_cst=[1, 1, 0, 0, 1, 1], random_state=42)
     base_model.fit(X_train, y_train)
 
     # 3. Fit Platt Sigmoid Calibrator on Validation Set
