@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 from fastapi.testclient import TestClient
 from backend.app.main import app
 
@@ -61,3 +61,29 @@ def test_batch_failure_isolation():
     assert results[0]["abstain"] is False or results[0].get("success") is True
     assert results[1]["abstain"] is True or results[1].get("error") is not None or results[1].get("success") is False
     assert results[2]["abstain"] is False or results[2].get("success") is True
+
+# 5. Rate Limiter Quota Exhaustion & 429 Error Envelope Verification (§15.2)
+def test_rate_limiter_exceeded_returns_429_envelope():
+    probe_ip = "198.51.100.77"
+    probe_headers = {"X-Test-Client-IP": probe_ip}
+    
+    # Exhaust 120 quota
+    for _ in range(120):
+        r = client.get("/health", headers=probe_headers)
+        assert r.status_code == 200
+        
+    # 121st request must trigger 429, not 500
+    res_limited = client.get("/health", headers=probe_headers)
+    assert res_limited.status_code == 429
+    assert res_limited.headers.get("retry-after") == "60"
+    assert res_limited.headers.get("x-ratelimit-limit") == "120"
+    assert res_limited.headers.get("x-ratelimit-remaining") == "0"
+    
+    data = res_limited.json()
+    assert data["code"] == "RATE_LIMIT_EXCEEDED"
+    assert data["retryable"] is True
+    assert data["request_id"].startswith("err-")
+    assert "Rate limit exceeded" in data["message"]
+    # Verify backward-compatible detail mapping
+    assert data["detail"]["code"] == "RATE_LIMIT_EXCEEDED"
+

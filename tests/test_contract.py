@@ -166,3 +166,41 @@ def test_risk_multiple_and_unclamped_resolution():
     assert data["risk_multiple"] == round(data["bust_probability"] / 0.05, 2)
     # Ensure artificial 0.08 clamp is removed (can be below 0.08 if raw model output is small)
     assert 0.01 <= data["bust_probability"] <= 0.95
+
+def test_openapi_all_routes_have_error_schemas():
+    schema = app.openapi()
+    paths = schema.get("paths", {})
+    assert len(paths) >= 20
+    assert "ErrorEnvelope" in schema.get("components", {}).get("schemas", {})
+    for path, path_item in paths.items():
+        for method in ["get", "post", "put", "delete", "patch"]:
+            if method in path_item:
+                responses = path_item[method].get("responses", {})
+                assert "401" in responses, f"Route {method.upper()} {path} missing 401 schema"
+                assert "429" in responses, f"Route {method.upper()} {path} missing 429 schema"
+
+def test_metrics_detail_full_suite():
+    res = client.get("/v1/metrics?detail=full")
+    assert res.status_code == 200
+    m = res.json()
+    # §10.3 Calibration Slope & Intercept
+    assert "calibration_slope" in m
+    assert 0.8 <= m["calibration_slope"] <= 1.25
+    assert "calibration_intercept" in m
+    # Log loss
+    assert "log_loss" in m
+    assert 0.05 <= m["log_loss"] <= 0.50
+    # §11.4 Coverage-risk curve
+    assert "coverage_risk_curve" in m
+    crc = m["coverage_risk_curve"]
+    assert len(crc) >= 5
+    assert "retained_brier" in crc[0]
+    assert "abstention_rate" in crc[0]
+    assert "high_conf_error_rate" in crc[0]
+    # §8 Block bootstrap CI
+    assert "block_bootstrap_ci" in m
+    bb = m["block_bootstrap_ci"]
+    assert "pr_auc_ci_95" in bb
+    assert len(bb["pr_auc_ci_95"]) == 2
+    assert bb["pr_auc_ci_95"][0] < bb["pr_auc_ci_95"][1]
+
