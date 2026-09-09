@@ -1,0 +1,60 @@
+import pytest
+from fastapi.testclient import TestClient
+from backend.app.main import app
+
+client = TestClient(app)
+AUTH_KEY = {"X-API-Key": "veyra-public-client-token"}
+KOLKATA = {
+    "location": "Kolkata",
+    "latitude": 22.56,
+    "longitude": 88.36,
+    "variable": "temperature_2m",
+    "lead_hours": 24
+}
+
+def post(body, headers=AUTH_KEY):
+    return client.post("/v1/predict", json=body, headers=headers)
+
+def test_health_ok():
+    res = client.get("/health")
+    assert res.status_code == 200
+    assert res.json()["status"] == "ok"
+
+def test_determinism():
+    a = post(KOLKATA).json()
+    b = post(KOLKATA).json()
+    assert a["bust_probability"] == b["bust_probability"]
+
+def test_monotone_in_lead():
+    ps = [post({**KOLKATA, "lead_hours": lead}).json()["bust_probability"] for lead in (24, 72, 120, 240)]
+    assert ps == sorted(ps)
+
+def test_interval_brackets_point():
+    d = post(KOLKATA).json()
+    assert d["p_bust_interval"]["lower"] <= d["bust_probability"] <= d["p_bust_interval"]["upper"]
+
+def test_abstain_returns_nulls():
+    d = post({**KOLKATA, "latitude": -89.9, "longitude": 0.0, "lead_hours": 240}).json()
+    assert d["abstain"] is True
+    assert d["bust_probability"] is None
+    assert d["p_bust_interval"] is None
+    assert "OOD_ABSTAIN" in d["reason_codes"]
+
+def test_cross_endpoint_agreement():
+    p = post(KOLKATA).json()["bust_probability"]
+    batch_res = client.post("/v1/predict/batch", json={"items": [KOLKATA]}, headers=AUTH_KEY).json()
+    assert batch_res["results"][0]["bust_probability"] == p
+
+@pytest.mark.parametrize("lead", [0, -5, 999])
+def test_invalid_lead_rejected(lead):
+    assert post({**KOLKATA, "lead_hours": lead}).status_code == 422
+
+def test_coords_out_of_bounds():
+    assert post({**KOLKATA, "latitude": 91.0}).status_code == 422
+
+def test_auth_required():
+    assert client.post("/v1/predict", json=KOLKATA).status_code == 401
+
+def test_scoring_mode_declared():
+    res = post(KOLKATA).json()
+    assert res["scoring_mode"] in {"ANALYTIC_REGIME_PRIOR", "ML_ARTIFACT_PLATT_GBM"}

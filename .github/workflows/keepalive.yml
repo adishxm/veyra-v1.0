@@ -1,0 +1,12 @@
+name: keepalive
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Keep Render API Warm
+        run: curl -fsS --max-time 60 https://veyra-v1-0.onrender.com/health || true

@@ -1,4 +1,4 @@
-﻿"""
+"""
 VEYRA Atmospheric Forecast Reliability Platform — Backend Core Engine
 SIH26079 Production Implementation (100% Specification & Evidentiary Compliance)
 """
@@ -17,6 +17,7 @@ import os
 import sys
 from pathlib import Path
 import importlib
+import logging
 import fastapi.openapi.utils
 
 # Dynamic sys.path insertion to ensure IDE/Pyrefly resolves imports cleanly
@@ -28,17 +29,25 @@ for _p in [str(_ROOT_DIR), str(_BACKEND_DIR), str(_CURRENT_DIR)]:
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-# Safe Dynamic ML Engine Integration
+logger = logging.getLogger("veyra")
+
+# Safe Dynamic ML Engine Integration with explicit error capture
 ml_engine = None
+_ml_load_error = None
 for _pkg in ["backend.app.ml.inference", "ml.inference", "app.ml.inference"]:
     try:
         _mod = importlib.import_module(_pkg)
         _Engine = getattr(_mod, "RealMLInferenceEngine", None)
         if _Engine is not None:
             ml_engine = _Engine()
+            _ml_load_error = None
             break
-    except Exception:
-        continue
+    except Exception as exc:
+        _ml_load_error = f"{_pkg}: {type(exc).__name__}: {exc}"
+        logger.exception("ML engine import failed for %s", _pkg)
+
+if ml_engine is None:
+    logger.error("ML ENGINE UNAVAILABLE — serving analytic prior. Last error: %s", _ml_load_error)
 
 app = FastAPI(
     title="veyra-v4-platform",
@@ -272,6 +281,7 @@ class HealthResponse(BaseModel):
     platform: str
     version: str
     dependencies: Dict[str, str]
+    ml_engine_error: Optional[str] = None
     claim_scope: str
     utc_time: str
 
@@ -406,7 +416,7 @@ def compute_single_prediction(
                 "structural_overconfidence": 0,
                 "failure_fingerprint": "STABLE_SYNOPTIC_CONSENSUS",
                 "dominant_risk_drivers": [],
-                "model_version": "veyra-v2-champion-lightgbm",
+                "model_version": "veyra-v2-champion-histgbm",
                 "data_version": "gfs-ensemble-openmeteo-v2.0",
                 "label_version": "labels_v1",
                 "bust_definition": "q95 of |forecast - ERA5| conditioned on (lead, variable, region, season)",
@@ -457,7 +467,7 @@ def compute_single_prediction(
                 "structural_overconfidence": 0,
                 "failure_fingerprint": "BAROCLINIC_WAVE_UNCERTAINTY",
                 "dominant_risk_drivers": ["DEEP_CYCLONIC_CORE_DEEPENING", "HIGH_ENSEMBLE_DIVERGENCE", "RAPID_PRESSURE_TENDENCY"],
-                "model_version": "veyra-v2-champion-lightgbm",
+                "model_version": "veyra-v2-champion-histgbm",
                 "data_version": "gfs-ensemble-openmeteo-v2.0",
                 "label_version": "labels_v1",
                 "bust_definition": "q95 of |forecast - ERA5| conditioned on (lead, variable, region, season)",
@@ -506,7 +516,7 @@ def compute_single_prediction(
                 "structural_overconfidence": 0,
                 "failure_fingerprint": "MODERATE_BAROCLINIC_SPREAD",
                 "dominant_risk_drivers": ["PERSISTENT_ANTICYCLONIC_SUBSIDENCE", "DRY_SOIL_MOISTURE_FEEDBACK"],
-                "model_version": "veyra-v2-champion-lightgbm",
+                "model_version": "veyra-v2-champion-histgbm",
                 "data_version": "gfs-ensemble-openmeteo-v2.0",
                 "label_version": "labels_v1",
                 "bust_definition": "q95 of |forecast - ERA5| conditioned on (lead, variable, region, season)",
@@ -550,7 +560,7 @@ def compute_single_prediction(
                 "structural_overconfidence": 1,
                 "failure_fingerprint": "OUT_OF_DOMAIN_DIVERGENCE",
                 "dominant_risk_drivers": ["OUT_OF_TRAINING_SUPPORT", "POLAR_VORTEX_EXTREME"],
-                "model_version": "veyra-v2-champion-lightgbm",
+                "model_version": "veyra-v2-champion-histgbm",
                 "data_version": "gfs-ensemble-openmeteo-v2.0",
                 "label_version": "labels_v1",
                 "bust_definition": "q95 of |forecast - ERA5| conditioned on (lead, variable, region, season)",
@@ -658,7 +668,7 @@ def compute_single_prediction(
             "structural_overconfidence": 1,
             "failure_fingerprint": "OUT_OF_DOMAIN_DIVERGENCE",
             "dominant_risk_drivers": ["OUT_OF_TRAINING_SUPPORT", "EXTREME_GEOGRAPHIC_DRIFT"],
-            "model_version": "veyra-v2-champion-lightgbm",
+            "model_version": "veyra-v2-champion-histgbm",
             "data_version": "gfs-ensemble-openmeteo-v2.0",
             "label_version": "labels_v1",
             "bust_definition": "q95 of |forecast - ERA5| conditioned on (lead, variable, region, season)",
@@ -808,7 +818,7 @@ def compute_single_prediction(
         "trust_state": trust,
         "regime_context": regime_label,
         "scoring_mode": scoring_mode,
-        "model_version": "veyra-v2-champion-lightgbm",
+        "model_version": "veyra-v2-champion-histgbm",
         "data_version": "gfs-ensemble-openmeteo-v2.0",
         "feature_schema_version": "veyra-canonical-v4",
         "truth_status": "VERIFICATION_PENDING",
@@ -852,8 +862,8 @@ def root_redirect():
     return RedirectResponse(url="/docs")
 
 # 1. Health Endpoint (§15)
-@app.get("/health")
-@app.get("/v1/health")
+@app.get("/health", response_model=HealthResponse)
+@app.get("/v1/health", response_model=HealthResponse)
 def health_check():
     return {
         "status": "ok",
@@ -866,6 +876,7 @@ def health_check():
             "upstream_proxy": "open-meteo-ensemble",
             "database_storage": "sqlite3_durable"
         },
+        "ml_engine_error": _ml_load_error,
         "claim_scope": CLAIM_SCOPE_DISCLAIMER,
         "utc_time": datetime.datetime.now(datetime.timezone.utc).isoformat()
     }
@@ -877,7 +888,7 @@ def get_platform_metadata():
         "service": "veyra-v4-platform",
         "version": "4.0.0-rc1",
         "claim_scope": CLAIM_SCOPE_DISCLAIMER,
-        "active_champion_model": "veyra-v2-champion-lightgbm",
+        "active_champion_model": "veyra-v2-champion-histgbm",
         "label_policy": {
             "version": "labels_v1",
             "bust_definition": "q95 of |forecast - ERA5| conditioned on (lead, variable, region, season)",
@@ -913,12 +924,12 @@ def get_data_provenance():
 def get_model_registry():
     return {
         "claim_scope": CLAIM_SCOPE_DISCLAIMER,
-        "active_champion": "veyra-v2-champion-lightgbm",
+        "active_champion": "veyra-v2-champion-histgbm",
         "models": [
             {
-                "model_id": "veyra-v2-champion-lightgbm",
-                "architecture": "LightGBM + Platt-Scaling",
-                "algorithm": "LightGBM + Platt-Scaling",
+                "model_id": "veyra-v2-champion-histgbm",
+                "architecture": "HistGradientBoosting + Platt-Scaling",
+                "algorithm": "HistGradientBoosting + Platt-Scaling",
                 "stage": "active",
                 "evaluation_status": "APPROVED_PRE_REGISTERED_TARGET",
                 "checksum": "adaec18c8352a1d7f4b80362391e9b25114582f059c27b92f7682914db25e831",
@@ -1352,7 +1363,7 @@ def get_prediction_logs(token: str = Depends(verify_admin_key)):
 def admin_retrain(token: str = Depends(verify_admin_key)):
     return {
         "status": "retrained",
-        "model_id": "veyra-v2-champion-lightgbm",
+        "model_id": "veyra-v2-champion-histgbm",
         "message": "Model calibration and conformal bounds updated successfully"
     }
 
