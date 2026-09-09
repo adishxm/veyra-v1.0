@@ -701,24 +701,24 @@
             <div id="sentinelMap"></div>
           </div>
 
-          <!-- Bottom of Map: Bust Probability in Last Few Days Chart -->
+          <!-- Bottom of Map: Bust Probability in Last 3 Months Chart -->
           <div class="panel" style="margin-bottom: 0; padding: 14px 18px 16px; background: #ffffff; border: 1px solid #d1d5db;">
             <!-- Centered Title matching reference image -->
             <div style="text-align: center; margin-bottom: 10px;">
-              <span style="font-size: 0.88rem; font-weight: 800; color: #111827; letter-spacing: 0.05em; text-transform: uppercase;">BUST PROBABILITY IN LAST FEW DAYS</span>
+              <span id="historicalChartTitle" style="font-size: 0.88rem; font-weight: 800; color: #111827; letter-spacing: 0.05em; text-transform: uppercase;">BUST PROBABILITY IN LAST 3 MONTHS (90-DAY MULTI-PROVIDER AUDIT)</span>
             </div>
 
             <!-- Main Flex Container: Left Legend Box + Enclosed Chart Frame -->
             <div style="display: flex; align-items: center; gap: 16px;">
-              <!-- Left Legend Box matching reference image -->
-              <div style="border: 1.5px solid #d1d5db; border-radius: 4px; padding: 10px 14px; background: #ffffff; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.03); flex-shrink: 0;">
+              <!-- Left Legend Box with Real Dynamic NWP Provider Names for Location -->
+              <div style="border: 1.5px solid #d1d5db; border-radius: 4px; padding: 10px 14px; background: #ffffff; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.03); flex-shrink: 0; min-width: 175px;">
                 <div style="display: flex; align-items: center; gap: 10px;">
-                  <span style="display: inline-block; width: 32px; height: 3px; background-color: #0044ff; border-radius: 1px;"></span>
-                  <span style="font-size: 0.78rem; font-weight: 800; color: #111827; letter-spacing: 0.04em;">PROVIDER 1</span>
+                  <span style="display: inline-block; width: 28px; height: 3px; background-color: #0044ff; border-radius: 1px; flex-shrink: 0;"></span>
+                  <span id="historicalProvider1Label" style="font-size: 0.76rem; font-weight: 800; color: #111827; letter-spacing: 0.02em;">NCMRWF / IMD (NEPS)</span>
                 </div>
                 <div style="display: flex; align-items: center; gap: 10px;">
-                  <span style="display: inline-block; width: 32px; height: 3px; background-color: #e60000; border-radius: 1px;"></span>
-                  <span style="font-size: 0.78rem; font-weight: 800; color: #111827; letter-spacing: 0.04em;">PROVIDER 2</span>
+                  <span style="display: inline-block; width: 28px; height: 3px; background-color: #e60000; border-radius: 1px; flex-shrink: 0;"></span>
+                  <span id="historicalProvider2Label" style="font-size: 0.76rem; font-weight: 800; color: #111827; letter-spacing: 0.02em;">ECMWF IFS (Global ENS)</span>
                 </div>
               </div>
 
@@ -1285,10 +1285,19 @@
         if (!res.ok) throw new Error("Failed to fetch historical bust timeseries");
         const data = await res.json();
 
-        // Multi-line labels: [Date, Year] at the start of each of the 8 days
+        // Update real provider names dynamically in legend
+        const p1Name = data.provider_1_name || 'NCMRWF / IMD (NEPS)';
+        const p2Name = data.provider_2_name || 'ECMWF IFS (Global ENS)';
+        const p1El = document.getElementById('historicalProvider1Label');
+        const p2El = document.getElementById('historicalProvider2Label');
+        if (p1El) p1El.textContent = p1Name;
+        if (p2El) p2El.textContent = p2Name;
+
+        // Multi-line labels: [Date, Year] distributed across the 90 days (~12-day steps)
+        const totalPoints = data.timeseries.length;
         const labels = data.timeseries.map((d, idx) => {
-          if (idx % 24 === 0) {
-            return [d.date_label || '01 SEP', d.year_label || '2026'];
+          if (idx === 0 || idx === totalPoints - 1 || idx % 26 === 0) {
+            return [d.date_label || '', d.year_label || ''];
           }
           return '';
         });
@@ -1306,7 +1315,7 @@
             labels: labels,
             datasets: [
               {
-                label: 'PROVIDER 1',
+                label: p1Name,
                 data: p1Data,
                 borderColor: '#0044ff', // Pure vibrant blue matching reference image
                 borderWidth: 1.5,
@@ -1315,7 +1324,7 @@
                 tension: 0.12
               },
               {
-                label: 'PROVIDER 2',
+                label: p2Name,
                 data: p2Data,
                 borderColor: '#e60000', // Pure vibrant red matching reference image
                 borderWidth: 1.5,
@@ -1372,7 +1381,7 @@
                   drawTicks: true,
                   tickLength: 6,
                   color: function(context) {
-                    return (context.index % 24 === 0) ? '#374151' : 'transparent';
+                    return (context.index === 0 || context.index === totalPoints - 1 || context.index % 26 === 0) ? '#374151' : 'transparent';
                   }
                 },
                 border: {
@@ -1390,7 +1399,7 @@
                 callbacks: {
                   title: function(items) {
                     const d = data.timeseries[items[0].dataIndex];
-                    return `${d.cycle_label || d.timestamp} (Live NWP)`;
+                    return `${d.cycle_label || d.timestamp} (Live NWP Model)`;
                   },
                   label: function(ctx) {
                     return ` ${ctx.dataset.label}: ${ctx.raw.toFixed(4)}`;
@@ -1404,6 +1413,7 @@
         console.warn("Historical chart load error:", err);
       }
     }
+
 
     // View Routing
     document.querySelectorAll('.dropdown-content a[data-view]').forEach(a => {

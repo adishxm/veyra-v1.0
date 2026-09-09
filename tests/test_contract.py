@@ -97,8 +97,15 @@ def test_historical_bust_timeseries_contract():
     data = res.json()
     assert "timeseries" in data
     assert len(data["timeseries"]) >= 100
+    assert data["provider_1_name"] == "NCMRWF / IMD (NEPS)"
+    assert data["provider_2_name"] == "ECMWF IFS (Global ENS)"
+    assert data["horizon_days"] == 90
     first = data["timeseries"][0]
     assert "provider_1" in first and "provider_2" in first
     assert "date_label" in first and "year_label" in first
     assert 0.05 <= first["provider_1"] <= 0.35
     assert 0.05 <= first["provider_2"] <= 0.35
+
+    res_us = client.get("/v1/historical-bust-timeseries?latitude=40.71&longitude=-74.00")
+    assert res_us.status_code == 200
+    assert res_us.json()["provider_1_name"] == "NOAA NWS (GEFS v12)"
