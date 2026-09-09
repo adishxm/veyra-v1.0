@@ -113,14 +113,47 @@ class RealMLInferenceEngine:
     @classmethod
     def predict_bust_probability(cls, features: Dict[str, Any]) -> float:
         artifact, status = cls.load_model()
-        if artifact is None or "classifier" not in artifact:
+        if artifact is None or ("classifier" not in artifact and "calibrator" not in artifact):
             raise RuntimeError(f"artifact_unavailable: {status}")
         
         spread = float(features.get("ensemble_spread", 1.2))
         lead = float(features.get("lead_hours", 48))
-        variance = spread ** 2 * 0.35
-        novelty = 3.5 + (lead / 35.0)
+        variance = float(features.get("variance", spread ** 2 * 0.35))
+        regime_bias = float(features.get("regime_bias", 0.0))
+        novelty = float(features.get("novelty", 3.5 + (lead / 35.0)))
         
-        vec = np.array([[spread, variance, 0.0, 0.0, lead, novelty]])
-        raw = artifact["classifier"].predict_proba(vec)[:, 1].reshape(-1, 1)
-        return float(artifact["calibrator"].predict_proba(raw)[0, 1])
+        feature_cols = artifact.get("feature_cols")
+        calibrator = artifact.get("calibrator")
+        classifier = artifact.get("classifier")
+
+        if feature_cols:
+            feat_map = {
+                "ensemble_spread": spread,
+                "variance": variance,
+                "regime_bias": regime_bias,
+                "novelty": novelty,
+                "lead_hours": lead
+            }
+            vec = np.array([[feat_map.get(col, 0.0) for col in feature_cols]])
+            if calibrator is not None and hasattr(calibrator, "predict_proba"):
+                try:
+                    return float(calibrator.predict_proba(vec)[0, 1])
+                except Exception:
+                    pass
+
+        # Fallback / legacy 6-feature pipeline
+        vec6 = np.array([[spread, variance, 0.0, 0.0, lead, novelty]])
+        if classifier is not None and hasattr(classifier, "predict_proba"):
+            try:
+                raw = classifier.predict_proba(vec6)[:, 1].reshape(-1, 1)
+                if calibrator is not None and hasattr(calibrator, "predict_proba"):
+                    return float(calibrator.predict_proba(raw)[0, 1])
+                return float(raw[0, 0])
+            except Exception:
+                pass
+
+        if calibrator is not None and hasattr(calibrator, "predict_proba"):
+            vec5 = np.array([[spread, variance, regime_bias, novelty, lead]])
+            return float(calibrator.predict_proba(vec5)[0, 1])
+
+        raise RuntimeError("artifact_execution_failed")

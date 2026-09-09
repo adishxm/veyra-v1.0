@@ -17,11 +17,14 @@ data/curated/*
 models/*
 !models/.gitkeep
 *.joblib
+!backend/app/ml/artifacts/*.joblib
 *.pkl
 *.parquet
+!data/processed/*.parquet
 *.nc
 *.grib
 *.grib2
+!experiments/*.json
 node_modules/
 dist/
 build/

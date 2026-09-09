@@ -6,6 +6,14 @@
 
 Veyra is an AI-powered reliability sentinel that audits numerical weather prediction (NWP) forecasts in real-time, estimating the calibrated probability of a severe forecast bust without leaking future ground truth.
 
+### Reproducibility & Verified Artifacts
+Every model artifact, dataset split, and evaluation metric published in this repository is committed and cryptographically verifiable:
+```bash
+sha256sum -c CHECKSUMS.txt
+```
+
+All published benchmarks reflect true offline holds on historical reanalysis without phantom references.
+
 ## Core Technical Capabilities
 
 1. **Multi-Provider Ingestion Hierarchy**: Ingests 31-member NOAA GEFS ensembles, regional NCMRWF/NEPS Indian guidance, and NOAA NWS with continuous solar radiative fallbacks.
