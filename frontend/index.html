@@ -69,17 +69,7 @@
     .mono { font-family: 'JetBrains Mono', monospace; }
 
     .claim-scope-banner {
-      background-color: #fef3c7;
-      border-bottom: 2px solid #f59e0b;
-      padding: 8px 24px;
-      font-size: 0.82rem;
-      text-align: center;
-      color: #78350f;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
+      display: none;
     }
 
     .agency-banner {
@@ -542,7 +532,7 @@
 <body>
 
   <!-- Mandatory Claim-Scope Disclaimer Banner -->
-  <div class="claim-scope-banner">
+  <div class="claim-scope-banner" style="display: none;">
     <i data-lucide="alert-circle" style="width:16px; height:16px;"></i>
     <span>CLAIM SCOPE: PUBLIC_PROXY_OPEN_METEO_LIVE_ONLY — Experimental research model; not an official warning; not NCMRWF-validated.</span>
   </div>
