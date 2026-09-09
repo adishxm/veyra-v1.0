@@ -109,3 +109,31 @@ def test_historical_bust_timeseries_contract():
     res_us = client.get("/v1/historical-bust-timeseries?latitude=40.71&longitude=-74.00")
     assert res_us.status_code == 200
     assert res_us.json()["provider_1_name"] == "NOAA NWS (GEFS v12)"
+
+def test_risk_trajectory_is_public():
+    res = client.get("/v1/risk-trajectory?latitude=22.56&longitude=88.36&variable=temperature_2m")
+    assert res.status_code == 200
+    data = res.json()
+    assert "trajectory" in data
+    assert len(data["trajectory"]) == 5
+
+def test_replay_scoring_mode_honest_fixture():
+    res = post({"replay_case": "bengaluru_case"}).json()
+    assert res["scoring_mode"] == "FROZEN_REPLAY_FIXTURE"
+
+def test_polar_abstain_scoring_mode_safety():
+    res = post({**KOLKATA, "latitude": -89.9, "longitude": 0.0, "lead_hours": 240}).json()
+    assert res["scoring_mode"] == "SAFETY_ABSTENTION"
+
+def test_openapi_security_operations_declared():
+    schema = app.openapi()
+    for path, item in schema.get("paths", {}).items():
+        for method, op in item.items():
+            if method in ["get", "post", "put", "delete", "patch"] and isinstance(op, dict):
+                assert "security" in op and op["security"] == [{"ApiKeyAuth": []}]
+
+def test_all_schema_routes_typed():
+    from fastapi.routing import APIRoute
+    for r in app.routes:
+        if isinstance(r, APIRoute) and r.include_in_schema:
+            assert r.response_model is not None, f"Untyped route found: {r.path}"

@@ -1,7 +1,7 @@
 # Veyra V4.0 — Atmospheric Forecast Reliability Platform
 
 [![CI Tests](https://github.com/adishxm/veyra-v1.0/actions/workflows/test.yml/badge.svg)](https://github.com/adishxm/veyra-v1.0/actions/workflows/test.yml)
-[![Tests](https://img.shields.io/badge/tests-59%2F59%20passing-brightgreen)](https://github.com/adishxm/veyra-v1.0/actions/workflows/test.yml)
+[![Tests](https://img.shields.io/badge/tests-65%2F65%20passing-brightgreen)](https://github.com/adishxm/veyra-v1.0/actions/workflows/test.yml)
 [![Keepalive](https://github.com/adishxm/veyra-v1.0/actions/workflows/keepalive.yml/badge.svg)](https://github.com/adishxm/veyra-v1.0/actions/workflows/keepalive.yml)
 [![Version](https://img.shields.io/badge/release-v4.0.0--rc1-purple)](https://veyra-v1-0.onrender.com/docs)
 
@@ -61,7 +61,7 @@ All published benchmarks reflect true empirical offline holds on historical rean
 | `/v1/forecasts` | `GET` | Public | Catalog of deterministic historical replay scenarios. |
 | `/v1/predict` | `POST` | User Token | Real-time single target calibrated forecast bust prediction. |
 | `/v1/predict/batch` | `POST` | User Token | Multi-coordinate batch evaluation with isolated item failure handling. |
-| `/v1/risk-trajectory`| `GET` | User Token | Multi-horizon risk ladder across 24h to 240h lead times. |
+| `/v1/risk-trajectory`| `GET` | Public | Multi-horizon risk ladder across 24h to 240h lead times. |
 | `/v1/risk-map` | `GET` | Public | GeoJSON spatial bust risk distribution across Indian synoptic sectors. |
 | `/v1/explanation` | `GET` | Public | Feature attributions and dominant risk drivers (suppressed on abstained points). |
 | `/v1/analogs` | `GET` | Public | Synoptic historical atmospheric analog search (suppressed on abstained points). |

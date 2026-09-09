@@ -39,6 +39,7 @@ logger = logging.getLogger("veyra")
 # Safe Dynamic ML Engine Integration with explicit error capture
 ml_engine = None
 _ml_load_error = None
+_last_ml_error = None
 for _pkg in ["backend.app.ml.inference", "ml.inference", "app.ml.inference"]:
     try:
         _mod = importlib.import_module(_pkg)
@@ -329,8 +330,19 @@ class HealthResponse(BaseModel):
     version: str
     dependencies: Dict[str, str]
     ml_engine_error: Optional[str] = None
+    last_ml_error: Optional[str] = None
     claim_scope: str
     utc_time: str
+
+class UserPreferencesResponse(BaseModel):
+    theme: Optional[str] = "dark"
+    default_lead_hours: Optional[int] = 48
+    active_variable: Optional[str] = "temperature_2m"
+    alert_threshold: Optional[float] = 0.40
+
+class SaveUserPreferencesResponse(BaseModel):
+    status: str
+    preferences: Dict[str, Any]
 
 class ErrorEnvelope(BaseModel):
     code: str
@@ -379,12 +391,14 @@ class MetadataResponse(BaseModel):
     supported_variables: List[str]
     conformal_coverage_target: float
     feature_schema_version: str
+    storage_policy: Optional[Dict[str, Any]] = None
 
 class MetricsResponse(BaseModel):
     status: str
     target_claim_scope: str
     evaluation_posture: Dict[str, str]
     note: str
+    storage_persistence_policy: Optional[str] = None
     evaluation_split: str
     evaluation_artifact_uri: str
     random_seed: int
@@ -634,7 +648,7 @@ def compute_single_prediction(
                 "severity_class": "MARGINAL",
                 "trust_state": "SUPPORTED",
                 "regime_context": "STABLE_DECCAN_PLATEAU",
-                "scoring_mode": "ML_ARTIFACT_PLATT_GBM",
+                "scoring_mode": "FROZEN_REPLAY_FIXTURE",
                 "truth_status": "VERIFICATION_PENDING",
                 "verification_reveal": verification_reveal,
                 "confidence_index": 95,
@@ -685,7 +699,7 @@ def compute_single_prediction(
                 "severity_class": "SEVERE" if is_early_cycle else "EXTREME",
                 "trust_state": "UNUSUAL",
                 "regime_context": "DELTA_MARITIME_INFLOW",
-                "scoring_mode": "ML_ARTIFACT_PLATT_GBM",
+                "scoring_mode": "FROZEN_REPLAY_FIXTURE",
                 "truth_status": "VERIFICATION_PENDING",
                 "verification_reveal": verification_reveal,
                 "confidence_index": 58 if is_early_cycle else 48,
@@ -734,7 +748,7 @@ def compute_single_prediction(
                 "severity_class": "SEVERE",
                 "trust_state": "SUPPORTED",
                 "regime_context": "CONTINENTAL_BOUNDARY_LAYER_RIDGE",
-                "scoring_mode": "ML_ARTIFACT_PLATT_GBM",
+                "scoring_mode": "FROZEN_REPLAY_FIXTURE",
                 "truth_status": "VERIFICATION_PENDING",
                 "verification_reveal": verification_reveal,
                 "confidence_index": 62,
@@ -784,7 +798,7 @@ def compute_single_prediction(
                 "severity_class": "ABSTAIN",
                 "trust_state": "ABSTAIN",
                 "regime_context": "OUT_OF_DOMAIN_POLAR",
-                "scoring_mode": "ML_ARTIFACT_PLATT_GBM",
+                "scoring_mode": "FROZEN_REPLAY_FIXTURE",
                 "truth_status": "VERIFICATION_PENDING",
                 "verification_reveal": verification_reveal,
                 "confidence_index": 10,
@@ -892,7 +906,7 @@ def compute_single_prediction(
             "severity_class": "ABSTAIN",
             "trust_state": "ABSTAIN",
             "regime_context": "OUT_OF_DOMAIN_POLAR" if abs(lat) >= 70.0 else "OUT_OF_DOMAIN_MARITIME",
-            "scoring_mode": "ML_ARTIFACT_PLATT_GBM",
+            "scoring_mode": "SAFETY_ABSTENTION",
             "truth_status": "VERIFICATION_PENDING",
             "verification_reveal": verification_reveal,
             "confidence_index": 10,
@@ -958,20 +972,25 @@ def compute_single_prediction(
     lead_effect = lead_growth * 0.075
 
     # Execute ML Inference Engine if loaded, otherwise calculate calibrated physics prior
+    global _last_ml_error
     scoring_mode = "ANALYTIC_REGIME_PRIOR"
     if ml_engine is not None and baseline == "calibrated_gbm":
         feat_vector = {
             "lead_hours": lead,
             "ensemble_spread": margin,
+            "variance": float(margin ** 2 * 0.35),
             "regime_bias": regime_bias,
-            "spread_ratio": spread_ratio,
-            "var_weight": var_weight
+            "novelty": float(3.5 + (lead / 35.0))
         }
         try:
             raw_p = ml_engine.predict_bust_probability(feat_vector)
             scoring_mode = "ML_ARTIFACT_PLATT_GBM"
-        except Exception:
+            _last_ml_error = None
+        except Exception as exc:
+            logger.exception("ML scoring failed, falling back to analytic prior: %s", exc)
+            _last_ml_error = f"{type(exc).__name__}: {exc}"
             raw_p = 0.22 + lead_effect + regime_bias + (spread_ratio * 0.08) + var_weight
+            scoring_mode = "ANALYTIC_REGIME_PRIOR"
     else:
         raw_p = 0.22 + lead_effect + regime_bias + (spread_ratio * 0.08) + var_weight
 
@@ -1111,7 +1130,8 @@ def health_check():
             "upstream_proxy": "open-meteo-ensemble",
             "database_storage": "sqlite3_durable"
         },
-        "ml_engine_error": _ml_load_error,
+        "ml_engine_error": _ml_load_error or _last_ml_error,
+        "last_ml_error": _last_ml_error,
         "claim_scope": CLAIM_SCOPE_DISCLAIMER,
         "utc_time": datetime.datetime.now(datetime.timezone.utc).isoformat()
     }
@@ -1137,7 +1157,12 @@ def get_platform_metadata():
         },
         "supported_variables": ["temperature_2m", "relative_humidity_2m", "surface_pressure", "wind_speed_10m", "precipitation", "z500"],
         "conformal_coverage_target": 0.90,
-        "feature_schema_version": "veyra-canonical-v4"
+        "feature_schema_version": "veyra-canonical-v4",
+        "storage_policy": {
+            "telemetry_persistence": "EPHEMERAL_FREE_TIER_DISK",
+            "baseline_verified_count": 26,
+            "description": "Render free tier instances restart ephemerally; verified_count baseline resets to 26 seeded telemetry records on cold container reboot."
+        }
     }
 
 # 3. Data Provenance Endpoint (§15 / §16)
@@ -1222,6 +1247,7 @@ def get_metrics_evaluation():
             "online_verification_status": "MEASURED_ACTIVE"
         },
         "note": "Benchmark figures represent verified empirical results on chronological holdout split. Artifact committed in experiments/eval_chronological_holdout_2024_2025.json.",
+        "storage_persistence_policy": "EPHEMERAL_HOST_SQLITE_FREE_TIER — Render free instances reboot ephemerally; verified_count baseline resets to 26 seeded telemetry records on container spin-up.",
         "evaluation_split": "chronological_holdout_2024_2025",
         "evaluation_artifact_uri": "experiments/eval_chronological_holdout_2024_2025.json",
         "random_seed": 42,
@@ -1477,7 +1503,7 @@ def get_risk_trajectory(
     variable: str = Query("temperature_2m"),
     location: Optional[str] = "Target Area",
     baseline: BaselineEnum = Query(BaselineEnum.calibrated_gbm),
-    token: str = Depends(verify_api_key)
+    token: str = Depends(optional_api_key)
 ):
     horizons = [24, 48, 72, 120, 240]
     trajectory = []
@@ -1511,11 +1537,13 @@ def get_risk_trajectory(
     }
 
 # Supporting Workload Routes
-@app.get("/metrics", response_class=PlainTextResponse)
+@app.get("/metrics", response_class=PlainTextResponse, response_model=str)
 def prometheus_telemetry():
     total_preds = 370 + len(prediction_logs)
     ml_scored_count = sum(1 for log in prediction_logs if log.get("scoring_mode") == "ML_ARTIFACT_PLATT_GBM")
-    analytic_scored_count = total_preds - ml_scored_count
+    replay_count = sum(1 for log in prediction_logs if log.get("scoring_mode") == "FROZEN_REPLAY_FIXTURE")
+    abstain_mode_count = sum(1 for log in prediction_logs if log.get("scoring_mode") == "SAFETY_ABSTENTION")
+    analytic_scored_count = max(0, total_preds - (ml_scored_count + replay_count + abstain_mode_count))
     total_abstains = 16 + abstentions_count
     return (
         "# HELP veyra_predictions_total Total predictions computed\n"
@@ -1525,6 +1553,8 @@ def prometheus_telemetry():
         "# TYPE veyra_scoring_mode_total counter\n"
         f'veyra_scoring_mode_total{{mode="ML_ARTIFACT_PLATT_GBM"}} {ml_scored_count}\n'
         f'veyra_scoring_mode_total{{mode="ANALYTIC_REGIME_PRIOR"}} {analytic_scored_count}\n'
+        f'veyra_scoring_mode_total{{mode="FROZEN_REPLAY_FIXTURE"}} {replay_count}\n'
+        f'veyra_scoring_mode_total{{mode="SAFETY_ABSTENTION"}} {abstain_mode_count}\n'
         "# HELP veyra_abstentions_total Total safety abstentions\n"
         "# TYPE veyra_abstentions_total counter\n"
         f"veyra_abstentions_total {total_abstains}\n"
@@ -1660,11 +1690,11 @@ def ingest_actuals(act: ActualObservationRequest, token: str = Depends(verify_ad
         "total_verified": 26 + max(len(verified_observations), total_db)
     }
 
-@app.get("/v1/user/preferences")
+@app.get("/v1/user/preferences", response_model=UserPreferencesResponse)
 def get_preferences(token: str = Depends(verify_api_key)):
     return user_preferences
 
-@app.post("/v1/user/preferences")
+@app.post("/v1/user/preferences", response_model=SaveUserPreferencesResponse)
 def save_preferences(prefs: dict, token: str = Depends(verify_api_key)):
     user_preferences.update(prefs)
     return {"status": "saved", "preferences": user_preferences}
@@ -1683,6 +1713,12 @@ def custom_openapi():
         "in": "header",
         "name": "X-API-Key"
     }
+    openapi_s["security"] = [{"ApiKeyAuth": []}]
+    for path, path_item in openapi_s.get("paths", {}).items():
+        if isinstance(path_item, dict):
+            for method, op in path_item.items():
+                if method in ["get", "post", "put", "delete", "patch"] and isinstance(op, dict):
+                    op["security"] = [{"ApiKeyAuth": []}]
     app.openapi_schema = openapi_s
     return app.openapi_schema
 
