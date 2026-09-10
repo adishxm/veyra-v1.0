@@ -197,10 +197,7 @@ def test_metrics_detail_full_suite():
     assert "retained_brier" in crc[0]
     assert "abstention_rate" in crc[0]
     assert "high_conf_error_rate" in crc[0]
-    # §8 Block bootstrap CI
-    assert "block_bootstrap_ci" in m
-    bb = m["block_bootstrap_ci"]
-    assert "pr_auc_ci_95" in bb
-    assert len(bb["pr_auc_ci_95"]) == 2
-    assert bb["pr_auc_ci_95"][0] < bb["pr_auc_ci_95"][1]
+    # §9.16 Audit fix: fabricated bootstrap CI removed, honest note present
+    assert "bootstrap_ci_note" in m
+    assert "block_bootstrap_ci" not in m
 
